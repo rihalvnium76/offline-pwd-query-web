@@ -214,15 +214,25 @@
             align-items: center;
             gap: 4px;
         }
+        /* 隐藏默认的增减按钮 */
         #pageInput {
             width: 52px;
-            padding: 2px 4px;
+            padding: 6px 4px;
             font-size: 14px;
             text-align: center;
+            -moz-appearance: textfield; /* Firefox */
+            appearance: textfield;      /* 标准属性 */
+        }
+
+        /* 针对 Chrome/Safari/Edge 隐藏 spinner */
+        #pageInput::-webkit-outer-spin-button,
+        #pageInput::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
         #gotoBtn {
-            padding: 2px 10px;
-            font-size: 13px;
+            padding: 6px 16px;   /* 与普通按钮一致 */
+            font-size: 14px;     /* 与普通按钮一致 */
         }
         /* dataHash */
         #dataHash {
