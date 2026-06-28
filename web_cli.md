@@ -4,7 +4,13 @@
 
 用户输入管理员分配的 Token 来登录，页面会用该 Token 从数据文件中解密并展示该 Token 允许访问的数据。
 
-为减小页面体积，代码尽可能使用原生 JavaScript，避免引入第三方库；数据文件采用紧凑格式，并通过 ID 引用共享数据以避免重复。
+为减小页面体积，代码尽可能使用原生 JavaScript，避免引入第三方库（除了 MessagePack 库）；数据文件采用紧凑格式，并通过 ID 引用共享数据以避免重复。
+
+## 加密/哈希算法相关参数
+
+- Token 生成：Python `secrets.token_urlsafe()`
+- PBKDF2：哈希算法 HMAC-SHA-256，盐值长度 16 字节，迭代次数 600000 次，输出长度 32 字节
+- AES-GCM：AES-256，密钥长度 32 字节，Nonce（IV）长度 12 字节，Tag 长度 16 字节
 
 ## 项目结构
 
@@ -12,52 +18,71 @@
 - `data/` 数据文件目录
     - `user/{tokenHash}` 用户数据文件
     - `data` 共享数据文件
+- `lib/` 第三方库目录
+    - `msgpack.min.js` MessagePack 库（UMD 格式）
 
-### 用户数据文件 `data/user/{tokenHash}`（`encryptedUser`）
+### 用户数据文件 `data/user/{tokenHash}`
 
-文件为二进制格式，其结构如下：
+文件为 MessagePack 格式，其结构如下：
 
-- `encryptedUser -> salt:u8[16] iv:u8[12] enc:u8[]`
-    - `salt`: PBKDF2 盐值
-    - `iv`: AES-GCM Nonce
-    - `enc`: AES-GCM 密文 + Tag（适配 Web Crypto API）
-    - 解密后得到 `user`
+```json
+// 解密得到 user
+[
+    "<bin, PBKDF2 Salt>",
+    "<bin, AES-GCM Nonce>",
+    // Tag 拼在密文后以适配 Web Crypto API
+    "<bin, AES-GCM 密文 + Tag>"
+]
+```
 
-`user` 结构（二进制格式）：`(groupId:u16 groupKey:u8[32])[]`
-
-### 共享数据文件 `data/data`（`dataSet`）
-
-文件为二进制格式，其结构如下：
-
-- `dataSet -> (size:u32 encryptedData:u8[size])[]`
-- `encryptedData -> iv:u8[12] enc:u8[]`
-    - `iv`: AES-GCM Nonce
-    - `enc`: AES-GCM 密文 + Tag
-    - 解密后得到 `group` 或 `file`
-
-`group` 结构（二进制格式）：`(fileId:u16 fileKey:u8[32])[]`
-
-`file`：UTF-8 编码的 JSON
+`user` 结构（MessagePack 格式）：
 
 ```json
 {
-    "name": "<fileName|originalPath>",
-    "path": "<filePath>",
-    "pwd": "<filePassword>",
-    "desc": "[description]",
-    "author": "[authorName]"
+    "name": "<str, userName>",
+    "groups": [
+        // 在 data 中指向加密的 group
+        ["<uint, groupId>", "<bin, groupKey>"]
+    ]
 }
 ```
 
-### 端序定义
+### 共享数据文件 `data/data`
 
-使用小端序
+文件为 MessagePack 格式，其结构如下：
 
-### 加密算法相关参数
+```json
+[
+    // 解密得到 group 或 file
+    [
+        "<bin, AES-GCM Nonce>",
+        // Tag 拼在密文后以适配 Web Crypto API
+        "<bin, AES-GCM 密文 + Tag>"
+    ]
+]
+```
 
-- Token：由 Python `secrets.token_urlsafe()` 生成
-- PBKDF2：哈希算法 HMAC-SHA-256，盐值长度 16 字节，迭代次数 600000 次，输出长度 32 字节
-- AES-GCM（AES-256-GCM）：密钥长度 32 字节，Nonce（IV）长度 12 字节，Tag 长度 16 字节
+`group` 结构（MessagePack 格式）：
+
+```json
+// files
+[
+    // 在 data 中指向加密的 file
+    ["<uint, fileId>", "<bin, fileKey>"]
+]
+```
+
+`file` 结构（MessagePack 格式）：
+
+```json
+{
+    "name": "<str, fileName|originalPath>",
+    "path": "<str, filePath>",
+    "pwd": "<str, filePassword>",
+    "desc": "[str, description]",
+    "author": "[str, authorName]"
+}
+```
 
 ## 文件缓存
 
@@ -71,19 +96,19 @@
 
 页面初始化：
 
-1. 读取 `data/data` 文件的内容，计算其 SHA-256 哈希值并以 Hex 字符串形式存入 `dataHash`，然后将该文件内容解析为 `[iv, enc][]` 数组存入 `data`
-    - 读取失败则禁止进行登录，并终止初始化流程（同时向用户显示错误）
-2. 读取 localStorage 中缓存的 Token。若存在 Token，则自动输入该 Token 到输入框并触发登录逻辑。若自动登录失败，则清除缓存的 Token
+1. 加载 `lib/msgpack.min.js`。失败则显示红色错误，禁用登录，终止初始化流程
+2. 读取 `data/data` 内容。成功则计算其 SHA-256 并转为 URL-safe Base64，存入 `dataHash`；反序列化存入 `data`。失败则显示红色错误，禁用登录，终止初始化流程
+3. 检查 `localStorage` 中的 Token，若有则自动填入并尝试登录。失败则清除缓存
 
-用户登录：
+登录：
 
 1. 用户输入 Token 登录
-2. `tokenBytes = token.encode("utf-8"); tokenHash = sha256Hex(tokenBytes)`
-3. 读取 `data/user/{tokenHash}` 并解析出 `salt`、`iv`、`enc`
+2. `tokenBytes = token.encode("utf-8"); tokenHash = urlsafeBase64(sha256(tokenBytes))`
+3. 读取 `data/user/{tokenHash}` 并反序列化到 `encryptedUser`
     - 若文件不存在则说明 Token 无效，终止流程
-4. 用 `salt` 和 `tokenBytes` 通过 PBKDF2 派生出密钥 `key`，再结合 `iv`，对 `enc` 进行 AES-256-GCM 解密，反序列化后得到 `user`
+4. 用 `tokenBytes`、`encryptedUser` 通过 PBKDF2 派生出密钥 `key`，再对 `encryptedUser` 进行 AES-256-GCM 解密，反序列化后得到 `user`
 5. `files = []; visited = new Set()`
-6. 遍历 `user`，其记录解构为 `[groupId, groupKey]`：
+6. 遍历 `user.groups`，其记录解构为 `[groupId, groupKey]`：
     1. `encryptedGroup = data[groupId]`
     2. 用 `groupKey` 对 `encryptedGroup` 进行 AES-256-GCM 解密，反序列化后得到 `group`
     3. 遍历 `group`，其记录解构为 `[fileId, fileKey]`：
@@ -91,110 +116,124 @@
         2. `encryptedFile = data[fileId]`
         3. 用 `fileKey` 对 `encryptedFile` 进行 AES-256-GCM 解密，反序列化后得到 `file`
         4. 添加 `file` 到 `files`
-7. 将 `files` 按 `File.path`、`File.name` 进行升序排序，后续 `files` 会显示到页面的文件表格中
-8. 将当前登录的 Token 明文存入 localStorage
+7. 若 `files` 非空，则将 `files` 按 `File.path`、`File.name` 进行升序排序，然后显示到文件表格中
+8. 现在是登陆成功状态。将当前登录的 Token 明文存入 `localStorage`
 
-## 网页 UI
+## UI
 
-### 页面元素
+### UI 元素
 
-- Token 输入框（`type="password"`）
-- “登录”按钮
-    - 登录按钮始终显示，已登录再点击登录是重新/切换登录
-    - 每次重新登录或切换用户前，必须清空当前用户的状态数据、缓存，并重置 UI 状态（包括清空及隐藏文件表格等）
-    - 登录成功后缓存当前用户的 Token 到 localStorage，下次进入页面自动登录
-- “退出”按钮
-    - 用户登录后按钮可见且可点击；未登录时按钮隐藏且处于禁用状态
-    - 退出登录时，需要清空用户的状态数据、缓存，和重置 UI 状态
-- 提示信息区：展示用户提示信息，其中错误提示为红色，其他提示为默认颜色
-- 文件表格搜索框：可搜索文件表格中的所有内容，搜索结果直接显示在文件表格中
+- Token 输入框（密码类型）
+    - 输入框左边无提示文本
+    - 输入框为空时，自身显示灰色文本“请输入 Token”
+- 登录/注销按钮
+    - 按钮显示在 Token 输入框下一行的最左，按钮右边是用户信息区
+    - 登录成功后为“注销”按钮，否则为“登录”按钮
+    - 登录成功后将 Token 明文存入 `localStorage`，用于自动登录
+    - 退出登录（注销）时，清空当前用户的状态数据、缓存（如 `localStorage`），并重置 UI 状态（包括清空及隐藏文件表格等）
+- 用户信息区：解析出 `user` 后，显示当前登录 Token 对应的用户名（`user.name`）；否则为空
+- 提示信息区：独立一行。错误信息红色，普通信息默认色
+- 文件表格搜索框
+    - 独立一行
+    - 搜索框左边有下拉框，可选择搜索全部列或指定一列
+    - 搜索框右边有“搜索”按钮
+    - 只有点击“搜索”按钮或者输入框中按下 Enter 才开始搜索
+    - 搜索结果直接显示在文件表格中
+    - 搜索结果为空时，表格无内容，而不是列出全部文件
 - 文件表格
-    - 表格列：
+    - 列：
         - 名称（`File.name`）
         - 路径（`File.path`）
         - 密码（`File.pwd`）
         - 描述（`File.desc`）
         - 作者（`File.author`）
-    - 密码列的密码文本：
-        - 密码文本的背景色（非整个单元格的背景色）为 #EBEEF2，且其背景带圆角样式
-        - 密码文本点击可以复制到剪贴板，且复制成功时提示信息区显示“已复制密码到剪贴板”
-        - 密码文本可以被选择复制（适配移动端某些 Clipboard API 失效的场景）
-    - 描述列：
-        - 表格中描述的单元格最多允许显示一行文本，超出部分截断显示为“...”
-        - 点击描述文本可弹出模态框，完整展示并可复制内容
+    - 密码列：文本背景色（非整个单元格的背景色）`#EBEEF2`，圆角，点击复制（复制成功提示“已复制密码到剪贴板”），支持移动端手动选择复制（适配移动端某些 Clipboard API 失效的场景）
+    - 描述列：描述单行截断（超出部分显示为“...”），点击弹出模态框，标题为文件名，完整描述可复制
+    - 表格支持水平滚动、列宽自适应，且保证单元格内容完整显示
     - 表格分页显示，每页最多 100 条记录，支持跳页
+        - 分页组件从左到右为：“上一页”按钮、当前页数输入框、总页数、跳转按钮、“下一页”按钮
+        - 页数显示为 `第 [X] / Y 页`，`[]` 表示输入框
+        - 页数输入框中按 Enter 或者点击“跳转”按钮后才跳页
     - 表格数据源自数据文件解析出的 `files`
-    - 表格仅在解析出 `user` 后显示，没文件数据也要显示列头；Token 无效或无法解析出 `user`，则隐藏表格
-- 数据文件校验码区
-    - `dataHash` 有值时显示该值（灰色文字）；无值时隐藏校验码区域
-    - 显示在网页底部
+    - 表格仅在解析出 `user` 后显示，无文件数据也显示表头；Token 无效或无法解析出 `user`，则隐藏表格
+- 数据文件校验码区：网页底部显示 `dataHash`（灰色），无值则隐藏整个区域
+
+- 不在页面内容中显示应用名/页面标题
 
 ### 页面元素状态
 
-| 阶段 | 提示信息区 | “登录”按钮状态 |
+| 阶段 | 提示信息区 | 登录/注销按钮状态 |
 | --- | --- | --- |
-| 载入 `data/data`：载入中 | 显示“正在加载数据文件……” | 禁用 |
-| 载入 `data/data`：成功 | 清空（占位留空） | 启用 |
-| 载入 `data/data`：失败 | 显示红色文字“数据文件加载失败，请刷新页面重试或联系管理员” | 禁用 |
-| 登录 - 解密中 | 显示“正在解密用户数据……”（若实现分批解密，可附加进度，如“已处理数/总数”，每 5 秒更新一次） | 禁用 |
-| 登录 - Token 无效或解密失败 | 显示红色文字“Token 无效或数据解密失败” | 启用 |
-| 登录 - 成功（有文件数据） | 清空（占位留空） | 启用 |
-| 登录 - 成功（无文件数据或组数据） | 显示“暂无可访问的数据” | 启用 |
+| 第三方库/依赖加载中 | “正在加载依赖……” | 禁用 |
+| 第三方库/依赖加载失败 | 红色“依赖加载失败，请刷新页面重试或联系管理员” | 禁用 |
+| `data/data` 加载中 | “正在加载数据文件……” | 禁用 |
+| `data/data` 加载成功 | 清空 | 启用 |
+| `data/data` 加载失败 | 红色“数据文件加载失败，请刷新页面重试或联系管理员” | 禁用 |
+| 登录解密中 | “正在解密用户数据……”（分批解密时，追加“已解密数/总数”进度显示，每 5 秒更新） | 禁用 |
+| 登录失败（Token 无效或解密失败） | 红色“Token 无效或数据解密失败” | 启用 |
+| 登录成功（`files` 非空） | 清空 | 启用 |
+| 登录成功（`files` 为空） | “暂无可访问的数据” | 启用 |
 
 ### 设备适配
 
-UI 需要适配桌面端和移动端
+需要适配桌面端和移动端
+
+### 布局与元素风格
+
+总体使用紧凑风格
 
 
-# 数据文件管理工具
+# 资源文件管理工具
 
-这是一个 Python CLI 脚本，用于生成 [离线查询网页](#offline-web) 所需的数据文件。
+这是一个 Python CLI 脚本，用于准备 [离线查询网页](#offline-web) 所需的第三方库和数据文件。
 
 脚本主要功能有：
 
-- 批量生成用户配置并输出到控制台
-- 转换数据文件：转换人类易编写的 TOML 格式的原始数据文件为一系列自定义二进制格式的加密数据文件
+- 下载更新依赖：自动下载更新页面所需的第三方库
+- 转换数据文件：转换便于人工编写的 TOML 格式的原始数据文件为一系列自定义二进制格式的加密数据文件
 
-除以下场景必须使用的依赖库外，脚本尽可能使用标准库实现，除非标准库实现过于复杂：
+脚本尽可能使用 Python 标准库，仅在以下场景引入第三方依赖：
 
-- pycryptodome 库：用于 AES 加密
+- pycryptodome：AES 加密
+- msgpack：MessagePack 格式序列化
 
-命令行参数解析用 argparse 库，TOML 解析使用 tomllib 库。
+命令行参数解析用标准库 argparse 库，TOML 解析使用标准库 tomllib 库
 
-## 批量生成用户配置并输出到控制台
+不考虑低版本 Python 兼容，不写兼容代码
 
-命令行入参：`-u <USER_NAME> [<USER_NAME> ...]`
+## 下载更新依赖
 
-- `USER_NAME` 表示要生成配置的用户名
+命令行参数：`-u [LIB_DIR]`
 
-向控制台输出每个用户的配置。配置格式如下：
+- `LIB_DIR`：第三方库目录的位置，默认为 `./lib/`，若目录不存在则递归创建
 
-```toml
-[user."<USER_NAME>"]
-token = "<token>"
+依赖列表：
 
-```
-
-其中每个用户的 `<token>` 的值由 `secrets.token_urlsafe()` 独立生成。
+| 本地路径 | 下载地址 |
+| --- | --- |
+| `lib/msgpack.min.js` | <https://unpkg.com/@msgpack/msgpack/dist.umd/msgpack.min.js> |
 
 ## 转换数据文件
 
-命令行入参：`-c [INPUT_FILE [OUTPUT_DIR]]` `[-y]`
+命令行参数：`-c [<INPUT_FILE> [DATA_DIR]] [-y]`
 
-- `INPUT_FILE` 是 TOML 格式的原始数据文件的路径，默认为当前路径下的 `data.toml`
-- `OUTPUT_DIR` 是输出的加密数据文件目录，若目录不存在则递归创建。默认为当前路径下的 `data/`
+- `INPUT_FILE`：TOML 格式的原始数据文件的路径，默认为 `./data.toml`
+- `DATA_DIR`：加密数据文件目录的位置，默认为 `./data/`，若目录不存在则递归创建
 
-- `-y` 表示静默删除并重建输出目录，无需确认
+- `-y` 表示静默删除并重建 `DATA_DIR`，无需确认；未指定时若目录存在则交互询问
 
-未指定 `-y` 时，若输出目录已存在，则询问是否删除并重建
+控制台输出转换的各类对象的总数，方便排查问题
 
-### 原始数据文件
+### 原始数据文件 `data.toml`
 
 #### 文件结构
 
 ```toml
+# tokenFilePath 默认为本文件所在目录下的 token.toml
+token_file = "[tokenFilePath]"
+
+# 这里是空表
 [user."<userName>"]
-token = "<token>"
 
 [group."<groupName>"]
 # 允许空列表
@@ -211,18 +250,40 @@ author = "[authorName]"
 groups = ["<groupName>"]
 ```
 
-分配字段：
+#### 输入约束
 
-- `user` 的每条记录在后续转换过程中，会被分配到全局唯一的 `salt`、`iv`
-- `group`、`file` 的每条记录在后续转换过程中，会被分配到全局唯一的 `iv`、`key`，同时该记录在输出 `data` 二进制数组中的位置下标（即该记录的 `id`）将被用作引用标识。例如，`user` 中的 `groupId` 和 `group` 中的 `fileId` 均指向对应记录在 `data` 数组中的下标值
+有效性约束：
+
+- `group.<groupName>.users` 中的每个 `userName` 必须在 `user` 表中有定义
+- `file.groups` 中的每个 `groupName` 必须在 `group` 表中有定义
+
+#### 分配字段
+
+- `user` 的每条记录在转换过程中，会被分配全局唯一的 `salt`、`iv`
+- `group`、`file` 的每条记录在后续转换过程中，会被分配全局唯一的 `iv`、`key`，同时该记录在输出 `data` 数组中的位置下标（即该记录的 `id`）将被用作引用标识。例如，`user` 中的 `groupId` 和 `group` 中的 `fileId` 均指向对应记录在 `data` 数组中的下标值
+
+#### Token
+
+每个用户都有且仅有一个全局唯一的 Token
+
+Token 不存放在对工具只读的原始数据文件中，而是存放于单独的可写的 Token 清单文件中，便于工具自动生成与回填。管理员只需查看清单文件
+
+用户没有 Token 时，工具会生成分配新的 Token 并记录到清单文件中；否则使用清空文件中的 Token
+
+### Token 清单文件 `token.toml`
+
+#### 文件结构
+
+```toml
+"<userName>" = "<token>"
+```
 
 #### 输入约束
 
 唯一性约束：
 
-- `user` 的记录之间的 `token` 不可重复
+- 不同 `userName` 之间的 `token` 不可重复
 
 有效性约束：
 
-- `group.<groupName>.users` 中的 `userName` 必须 `user[userName]` 存在
-- `files[].groups` 中的 `groupName` 必须 `group[groupName]` 存在
+- `userName` 必须在原始数据文件的 `user` 表中有定义

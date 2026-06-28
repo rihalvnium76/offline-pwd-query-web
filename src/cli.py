@@ -1,280 +1,347 @@
 #!/usr/bin/env python3
 """
-离线查询数据文件管理工具
+资源文件管理工具 - 用于准备离线查询网页所需的数据文件。
+
 用法:
-  生成用户配置: python cli.py -u user1 user2 ...
-  转换数据文件: python cli.py -c [input.toml] [output_dir] [-y]
+    python cli.py -u [LIB_DIR]
+    python cli.py -c [INPUT_FILE] [DATA_DIR] [-y]
 """
 
 import argparse
-import os
-import sys
-import secrets
+import base64
 import hashlib
-import struct
-import json
+import secrets
 import shutil
+import sys
+import urllib.request
+import urllib.error
 from pathlib import Path
+from typing import Any, Dict, List, Tuple
+import tomllib  # Python 3.11+
 
-# 尝试导入 tomllib (Python 3.11+)
 try:
-    import tomllib
+    from Crypto.Cipher import AES
+    from Crypto.Protocol.KDF import PBKDF2
+    from Crypto.Random import get_random_bytes
+    from Crypto.Hash import SHA256
 except ImportError:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        sys.stderr.write("错误: 需要 tomllib (Python 3.11+) 或 tomli 库\n")
-        sys.exit(1)
+    print("错误: 需要安装 pycryptodome 库: pip install pycryptodome", file=sys.stderr)
+    sys.exit(1)
 
-from Crypto.Cipher import AES
-from Crypto.Protocol.KDF import PBKDF2
-from Crypto.Random import get_random_bytes
-from Crypto.Hash import SHA256
+try:
+    import msgpack
+except ImportError:
+    print("错误: 需要安装 msgpack 库: pip install msgpack", file=sys.stderr)
+    sys.exit(1)
 
 
-# ---------- 常量 ----------
+# ===== 常量 =====
 PBKDF2_ITERATIONS = 600000
-KEY_LEN = 32
-SALT_LEN = 16
-IV_LEN = 12
-TAG_LEN = 16
+AES_KEY_LEN = 32  # 256 bits
+AES_NONCE_LEN = 12
+AES_TAG_LEN = 16
+TOKEN_URLSAFE_BYTES = 32
 
 
-# ---------- 工具函数 ----------
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+# ===== 辅助函数 =====
+
+def ensure_dir(path: Path) -> None:
+    """确保目录存在，若不存在则递归创建。"""
+    path.mkdir(parents=True, exist_ok=True)
 
 
-def encrypt_aes_gcm(key: bytes, plaintext: bytes) -> tuple[bytes, bytes]:
-    """使用随机 IV 加密，返回 (iv, ciphertext_with_tag)"""
-    iv = get_random_bytes(IV_LEN)
-    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
+def to_base64url(data: bytes) -> str:
+    """将 bytes 转为 URL-safe Base64（无填充）。"""
+    return base64.urlsafe_b64encode(data).rstrip(b'=').decode('ascii')
+
+
+def from_base64url(s: str) -> bytes:
+    """从 URL-safe Base64 字符串还原 bytes（自动补齐填充）。"""
+    s = s.strip()
+    pad = len(s) % 4
+    if pad:
+        s += '=' * (4 - pad)
+    return base64.urlsafe_b64decode(s)
+
+
+def sha256(data: bytes) -> bytes:
+    """计算 SHA-256 摘要。"""
+    return hashlib.sha256(data).digest()
+
+
+def derive_key(password: str, salt: bytes) -> bytes:
+    """使用 PBKDF2-HMAC-SHA256 派生 AES-256 密钥。"""
+    return PBKDF2(password, salt, dkLen=AES_KEY_LEN, count=PBKDF2_ITERATIONS, hmac_hash_module=SHA256)
+
+
+def aes_gcm_encrypt(key: bytes, plaintext: bytes) -> Tuple[bytes, bytes, bytes]:
+    """
+    使用 AES-256-GCM 加密明文。
+    返回: (nonce, ciphertext, tag)
+    """
+    nonce = get_random_bytes(AES_NONCE_LEN)
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
     ciphertext, tag = cipher.encrypt_and_digest(plaintext)
-    return iv, ciphertext + tag
+    return nonce, ciphertext, tag
 
 
-def decrypt_aes_gcm(key: bytes, iv: bytes, ciphertext_with_tag: bytes) -> bytes:
-    """解密，ciphertext_with_tag 包含末尾 16 字节 tag"""
-    cipher = AES.new(key, AES.MODE_GCM, nonce=iv)
-    return cipher.decrypt_and_verify(ciphertext_with_tag[:-TAG_LEN], ciphertext_with_tag[-TAG_LEN:])
+def build_user_encrypted_payload(user_data: Dict[str, Any], token: str) -> bytes:
+    """
+    构造用户数据文件内容（MsgPack 数组）:
+        [salt, nonce, ciphertext + tag]
+    其中 salt 用于 PBKDF2，nonce 用于 AES-GCM。
+    使用 token 作为密码派生密钥。
+    """
+    salt = get_random_bytes(16)  # PBKDF2 salt 16 字节
+    key = derive_key(token, salt)
+    plaintext = msgpack.packb(user_data)
+    nonce, ciphertext, tag = aes_gcm_encrypt(key, plaintext)
+    ciphertext_tag = ciphertext + tag
+    payload = msgpack.packb([salt, nonce, ciphertext_tag])
+    return payload
 
 
-def derive_key(token: bytes, salt: bytes) -> bytes:
-    return PBKDF2(token, salt, dkLen=KEY_LEN, count=PBKDF2_ITERATIONS, hmac_hash_module=SHA256)
+def encrypt_group_or_file(data: Dict[str, Any] or List) -> Tuple[bytes, bytes, bytes]:
+    """
+    加密 group 或 file 数据，返回 (key, nonce, ciphertext+tag)
+    注意：不在此处进行 msgpack 打包，由调用者负责组装。
+    """
+    key = get_random_bytes(AES_KEY_LEN)
+    plaintext = msgpack.packb(data)
+    nonce, ciphertext, tag = aes_gcm_encrypt(key, plaintext)
+    ciphertext_tag = ciphertext + tag
+    return key, nonce, ciphertext_tag
 
 
-def pack_user_entries(entries: list[tuple[int, bytes]]) -> bytes:
-    """将 [(groupId, groupKey), ...] 序列化为二进制"""
-    out = bytearray()
-    for gid, gkey in entries:
-        out.extend(struct.pack('<H', gid))
-        out.extend(gkey)  # 32 bytes
-    return bytes(out)
+def load_token_file(token_path: Path) -> Dict[str, str]:
+    """加载 token.toml 文件，返回 {user_name: token}。"""
+    if not token_path.exists():
+        return {}
+    with open(token_path, 'rb') as f:
+        data = tomllib.load(f)
+    return {k: v for k, v in data.items() if isinstance(v, str)}
 
 
-def pack_group_entries(entries: list[tuple[int, bytes]]) -> bytes:
-    """将 [(fileId, fileKey), ...] 序列化为二进制"""
-    out = bytearray()
-    for fid, fkey in entries:
-        out.extend(struct.pack('<H', fid))
-        out.extend(fkey)
-    return bytes(out)
+def save_token_file(token_path: Path, token_map: Dict[str, str]) -> None:
+    """保存 token.toml 文件。"""
+    sorted_items = sorted(token_map.items())
+    with open(token_path, 'w', encoding='utf-8') as f:
+        for user, token in sorted_items:
+            f.write(f'"{user}" = "{token}"\n')
 
 
-# ---------- 生成用户配置 ----------
-def generate_user_config(usernames: list[str]) -> str:
-    """生成 TOML 格式的用户配置"""
-    lines = []
-    for name in usernames:
-        token = secrets.token_urlsafe()
-        lines.append(f'[user."{name}"]')
-        lines.append(f'token = "{token}"')
-        lines.append('')
-    return '\n'.join(lines)
+def generate_token() -> str:
+    """生成一个新的 URL-safe Token（32 字节）。"""
+    return secrets.token_urlsafe(TOKEN_URLSAFE_BYTES)
 
 
-# ---------- 转换数据文件 ----------
-def convert_data(input_file: str, output_dir: str, force: bool = False):
-    input_path = Path(input_file)
-    if not input_path.exists():
-        sys.stderr.write(f"错误: 输入文件 {input_file} 不存在\n")
+# ===== 数据转换核心 =====
+
+def convert_data(toml_path: Path, data_dir: Path, yes: bool) -> None:
+    """
+    读取 TOML 文件，执行转换，生成 data/ 目录下的文件。
+    """
+    if not toml_path.exists():
+        print(f"错误: 输入文件 {toml_path} 不存在", file=sys.stderr)
         sys.exit(1)
 
-    output_path = Path(output_dir)
-    if output_path.exists():
-        if force:
-            shutil.rmtree(output_path)
+    with open(toml_path, 'rb') as f:
+        toml_data = tomllib.load(f)
+
+    token_file_str = toml_data.get('token_file', None)
+    if token_file_str:
+        token_path = Path(token_file_str)
+    else:
+        token_path = toml_path.parent / 'token.toml'
+
+    user_table = toml_data.get('user', {})
+    group_table = toml_data.get('group', {})
+    file_list = toml_data.get('file', [])
+
+    # 验证约束
+    all_users = set(user_table.keys())
+    for gname, gdata in group_table.items():
+        users = gdata.get('users', [])
+        for uname in users:
+            if uname not in all_users:
+                print(f"错误: group '{gname}' 中的 user '{uname}' 未在 user 表中定义", file=sys.stderr)
+                sys.exit(1)
+
+    all_groups = set(group_table.keys())
+    for f_idx, fdata in enumerate(file_list):
+        groups = fdata.get('groups', [])
+        for gname in groups:
+            if gname not in all_groups:
+                print(f"错误: file #{f_idx} 中的 group '{gname}' 未在 group 表中定义", file=sys.stderr)
+                sys.exit(1)
+
+    data_dir = Path(data_dir)
+    if data_dir.exists():
+        if yes:
+            shutil.rmtree(data_dir)
         else:
-            resp = input(f"输出目录 {output_dir} 已存在，是否删除并重建？(y/N): ")
-            if resp.lower() != 'y':
-                print("已取消")
+            resp = input(f"目录 {data_dir} 已存在，删除并重建？[y/N] ").strip().lower()
+            if resp != 'y':
+                print("操作取消")
                 sys.exit(0)
-            shutil.rmtree(output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
+            shutil.rmtree(data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
 
-    # 读取 TOML
-    with open(input_path, 'rb') as f:
-        data = tomllib.load(f)
+    user_dir = data_dir / 'user'
+    user_dir.mkdir(parents=True, exist_ok=True)
 
-    # 解析用户、组、文件
-    users = data.get('user', {})
-    groups = data.get('group', {})
-    files = data.get('file', [])
+    token_map = load_token_file(token_path)
+    updated = False
+    for uname in user_table.keys():
+        if uname not in token_map or not token_map[uname]:
+            token_map[uname] = generate_token()
+            updated = True
+    if updated:
+        save_token_file(token_path, token_map)
+        print(f"已更新 token 清单: {token_path}")
 
-    # 验证用户 token 唯一
-    tokens = set()
-    for uname, uinfo in users.items():
-        token = uinfo.get('token')
-        if not token:
-            sys.stderr.write(f"错误: 用户 {uname} 缺少 token\n")
-            sys.exit(1)
-        if token in tokens:
-            sys.stderr.write(f"错误: 用户 {uname} 的 token 重复\n")
-            sys.exit(1)
-        tokens.add(token)
+    # 构建 data 数组，每个元素为 [nonce, ciphertext+tag] (均为 bytes)
+    data_entries: List[List[bytes]] = []  # 最终将 msgpack 序列化此列表
 
-    # 验证 group.users 引用存在
-    for gname, ginfo in groups.items():
-        for uname in ginfo.get('users', []):
-            if uname not in users:
-                sys.stderr.write(f"错误: 组 {gname} 引用了不存在的用户 {uname}\n")
-                sys.exit(1)
+    # 记录 id 映射
+    group_id_map: Dict[str, int] = {}
+    file_id_map: Dict[int, int] = {}  # 原始文件索引 -> data id
+    file_keys: Dict[int, bytes] = {}  # 原始文件索引 -> fileKey
 
-    # 验证 file.groups 引用存在
-    for idx, finfo in enumerate(files):
-        for gname in finfo.get('groups', []):
-            if gname not in groups:
-                sys.stderr.write(f"错误: 文件 #{idx} 引用了不存在的组 {gname}\n")
-                sys.exit(1)
-
-    # 分配 file 加密块
-    file_blocks = []           # 每个元素: (iv, enc, file_key)
-    file_entries = []          # 用于 group 引用: (fileId, fileKey)
-    for idx, finfo in enumerate(files):
-        # 构建 file JSON
-        file_json = {
-            "name": finfo.get("name", ""),
-            "path": finfo.get("path", ""),
-            "pwd": finfo.get("pwd", ""),
-            "desc": finfo.get("desc", ""),
-            "author": finfo.get("author", "")
+    # 处理所有 file
+    for f_idx, fdata in enumerate(file_list):
+        file_obj = {
+            'name': fdata.get('name', ''),
+            'path': fdata.get('path', ''),
+            'pwd': fdata.get('pwd', ''),
+            'desc': fdata.get('desc', ''),
+            'author': fdata.get('author', ''),
         }
-        plaintext = json.dumps(file_json, ensure_ascii=False).encode('utf-8')
-        file_key = get_random_bytes(KEY_LEN)
-        iv, enc = encrypt_aes_gcm(file_key, plaintext)
-        file_blocks.append((iv, enc))
-        file_entries.append((idx, file_key))  # idx 即 fileId
+        key, nonce, ciphertext_tag = encrypt_group_or_file(file_obj)
+        file_id = len(data_entries)
+        data_entries.append([nonce, ciphertext_tag])
+        file_keys[f_idx] = key
+        file_id_map[f_idx] = file_id
 
-    # 分配 group 加密块
-    group_blocks = []          # 每个元素: (iv, enc, group_key, group_name)
-    group_id_map = {}          # group_name -> groupId (在最终 data 中的索引)
-
-    # 构建 group 的 file 引用列表 (fileId, fileKey)
-    group_file_refs = {}
-    for gname, ginfo in groups.items():
-        refs = []
-        for fidx, finfo in enumerate(files):
-            if gname in finfo.get('groups', []):
-                file_key = file_entries[fidx][1]
-                refs.append((fidx, file_key))
-        group_file_refs[gname] = refs
-
-    # 为每个 group 生成加密块
-    for gname, refs in group_file_refs.items():
-        plaintext = pack_group_entries(refs)
-        group_key = get_random_bytes(KEY_LEN)
-        iv, enc = encrypt_aes_gcm(group_key, plaintext)
-        group_blocks.append((iv, enc, group_key, gname))
-
-    # 确定最终 data 数组顺序: 先所有 file 块，然后所有 group 块
-    all_blocks = []   # 每个元素 (iv, enc)
-    for iv, enc in file_blocks:
-        all_blocks.append((iv, enc))
-    group_start_index = len(file_blocks)
-    for idx, (iv, enc, gkey, gname) in enumerate(group_blocks):
-        all_blocks.append((iv, enc))
-        group_id = group_start_index + idx
+    # 处理所有 group
+    group_keys: Dict[str, bytes] = {}
+    for gname, gdata in group_table.items():
+        group_files = []
+        for f_idx, fdata in enumerate(file_list):
+            if gname in fdata.get('groups', []):
+                file_id = file_id_map[f_idx]
+                file_key = file_keys[f_idx]
+                group_files.append([file_id, file_key])
+        # group 对象是数组
+        group_obj = group_files
+        key, nonce, ciphertext_tag = encrypt_group_or_file(group_obj)
+        group_id = len(data_entries)
+        data_entries.append([nonce, ciphertext_tag])
+        group_keys[gname] = key
         group_id_map[gname] = group_id
 
-    # 构建 group_name -> (groupId, groupKey) 映射
-    group_info_map = {}
-    for gname, gid in group_id_map.items():
-        # 找到对应的 group_blocks 中的 gkey
-        for iv, enc, gkey, name in group_blocks:
-            if name == gname:
-                group_info_map[gname] = (gid, gkey)
-                break
-
-    # 为每个用户生成加密文件
-    user_dir = output_path / 'user'
-    user_dir.mkdir(exist_ok=True)
-
-    for uname, uinfo in users.items():
-        token = uinfo['token']
+    # 处理所有 user
+    for uname, udata in user_table.items():
+        token = token_map.get(uname)
+        if not token:
+            token = generate_token()
+            token_map[uname] = token
+            save_token_file(token_path, token_map)
+        user_groups = []
+        for gname, gid in group_id_map.items():
+            gdata = group_table.get(gname, {})
+            if uname in gdata.get('users', []):
+                group_key = group_keys[gname]
+                user_groups.append([gid, group_key])
+        user_obj = {
+            'name': uname,
+            'groups': user_groups,
+        }
+        payload = build_user_encrypted_payload(user_obj, token)
         token_bytes = token.encode('utf-8')
-        token_hash = sha256_hex(token_bytes)
-
-        # 收集该用户所属的组
-        user_group_entries = []
-        for gname, ginfo in groups.items():
-            if uname in ginfo.get('users', []):
-                if gname not in group_info_map:
-                    sys.stderr.write(f"错误: 组 {gname} 未找到 groupId\n")
-                    sys.exit(1)
-                gid, gkey = group_info_map[gname]
-                user_group_entries.append((gid, gkey))
-
-        plaintext = pack_user_entries(user_group_entries)
-        salt = get_random_bytes(SALT_LEN)
-        key = derive_key(token_bytes, salt)
-        iv, enc = encrypt_aes_gcm(key, plaintext)
-
-        # 文件内容: salt + iv + enc
-        user_file_content = salt + iv + enc
+        token_hash = to_base64url(sha256(token_bytes))
         user_file_path = user_dir / token_hash
         with open(user_file_path, 'wb') as f:
-            f.write(user_file_content)
+            f.write(payload)
 
-    # 写入 data/data 文件
-    data_file_path = output_path / 'data'
+    # 写入 data/data (整个数组 msgpack 序列化)
+    data_file_path = data_dir / 'data'
     with open(data_file_path, 'wb') as f:
-        for iv, enc in all_blocks:
-            encrypted_data = iv + enc  # iv + ciphertext+tag
-            size = len(encrypted_data)
-            if size > 0xFFFF:
-                sys.stderr.write(f"错误: 加密数据块大小 {size} 超过 65535\n")
-                sys.exit(1)
-            f.write(struct.pack('<H', size))
-            f.write(encrypted_data)
+        msgpack.pack(data_entries, f)
 
-    print(f"转换完成。数据文件已写入 {output_path}")
-    print(f"共写入 {len(all_blocks)} 个加密块 (file: {len(file_blocks)}, group: {len(group_blocks)})")
-    print(f"用户文件生成在 {user_dir} 目录")
+    print(f"转换完成。")
+    print(f"  用户数: {len(user_table)}")
+    print(f"  组数: {len(group_table)}")
+    print(f"  文件数: {len(file_list)}")
+    print(f"  数据文件写入: {data_file_path}")
+    print(f"  用户数据目录: {user_dir}")
+    print(f"  Token 清单: {token_path}")
 
 
-# ---------- 主函数 ----------
+# ===== 下载依赖 =====
+
+def download_dependencies(lib_dir: Path) -> None:
+    """下载第三方库到 lib_dir 目录。"""
+    ensure_dir(lib_dir)
+
+    dependencies = [
+        {
+            'url': 'https://unpkg.com/@msgpack/msgpack/dist.umd/msgpack.min.js',
+            'local': lib_dir / 'msgpack.min.js',
+        },
+    ]
+
+    for dep in dependencies:
+        url = dep['url']
+        local_path = dep['local']
+        print(f"下载 {url} -> {local_path}")
+        try:
+            urllib.request.urlretrieve(url, local_path)
+        except Exception as e:
+            print(f"错误: 下载 {url} 失败: {e}", file=sys.stderr)
+            sys.exit(1)
+    print("依赖下载完成。")
+
+
+# ===== 命令行入口 =====
+
 def main():
-    parser = argparse.ArgumentParser(description="离线查询数据文件管理工具")
+    parser = argparse.ArgumentParser(description="资源文件管理工具")
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-u', '--users', nargs='+', help='生成用户 Token 配置，后跟用户名列表')
-    group.add_argument('-c', '--convert', nargs='*', help='转换 TOML 数据文件，后可跟 [input_file] [output_dir]')
-    parser.add_argument('-y', '--yes', action='store_true', help='静默删除并重建输出目录（仅与 -c 配合）')
+    group.add_argument('-u', '--update', nargs='?', const='./lib/', default=None,
+                       metavar='LIB_DIR', help='下载更新依赖到 LIB_DIR (默认 ./lib/)')
+    group.add_argument('-c', '--convert', nargs='*', metavar=('INPUT_FILE', 'DATA_DIR'),
+                       help='转换数据文件: INPUT_FILE (默认 ./data.toml) 和 DATA_DIR (默认 ./data/)')
+
+    parser.add_argument('-y', '--yes', action='store_true', help='静默删除并重建 DATA_DIR (仅用于 -c)')
 
     args = parser.parse_args()
 
-    if args.users:
-        # 生成用户配置
-        toml_output = generate_user_config(args.users)
-        print(toml_output)
-    elif args.convert is not None:
-        # 解析参数
-        if len(args.convert) > 2:
-            parser.error('-c 最多接受两个参数：输入文件和输出目录')
-        input_file = args.convert[0] if len(args.convert) >= 1 else 'data.toml'
-        output_dir = args.convert[1] if len(args.convert) >= 2 else 'data'
-        convert_data(input_file, output_dir, args.yes)
-    else:
-        parser.print_help()
+    if args.update is not None:
+        # -u 模式：update 参数可能是 None（如果用户只写了 -u 没有值），但 nargs='?' 会捕获
+        lib_dir = Path(args.update) if args.update else Path('./lib/')
+        download_dependencies(lib_dir)
+        return
+
+    if args.convert is not None:
+        args_list = args.convert
+        if len(args_list) == 0:
+            input_file = Path('./data.toml')
+            data_dir = Path('./data/')
+        elif len(args_list) == 1:
+            input_file = Path(args_list[0])
+            data_dir = Path('./data/')
+        elif len(args_list) == 2:
+            input_file = Path(args_list[0])
+            data_dir = Path(args_list[1])
+        else:
+            print("错误: -c 接受最多两个参数", file=sys.stderr)
+            sys.exit(1)
+
+        convert_data(input_file, data_dir, args.yes)
+        return
+
+    parser.print_help()
 
 
 if __name__ == '__main__':
