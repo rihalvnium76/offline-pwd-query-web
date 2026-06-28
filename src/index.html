@@ -29,33 +29,6 @@
             box-shadow: 0 1px 3px rgba(0,0,0,0.08);
             padding: 20px 24px 16px;
         }
-
-        /* 让第二行顶部间距稍小，与输入框更紧凑 */
-        #app .row:last-of-type {
-            margin-bottom: 6px;  /* 或其它合适值 */
-        }
-
-        /* 针对第二行（登录按钮 + 用户信息）水平排列，防止换行 */
-        #app .row:last-of-type {
-            flex-direction: row;
-            flex-wrap: nowrap;
-            align-items: center;
-        }
-
-        /* 按钮不压缩 */
-        #app .row:last-of-type button {
-            flex-shrink: 0;
-        }
-
-        /* 用户信息占满剩余空间，过长则截断 */
-        #app .row:last-of-type #userInfo {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1 1 auto;
-            min-width: 0;  /* 防止 flex 溢出 */
-        }
-
         .row {
             display: flex;
             flex-wrap: wrap;
@@ -63,9 +36,8 @@
             gap: 8px 12px;
             margin-bottom: 10px;
         }
-        .row label {
-            font-weight: 500;
-            margin-right: 2px;
+        .row:last-child {
+            margin-bottom: 0;
         }
         .flex-grow {
             flex: 1 1 auto;
@@ -87,9 +59,10 @@
         input[type="password"] {
             width: 100%;
         }
-        input:focus, select:focus {
+        input:focus,
+        select:focus {
             border-color: #2563eb;
-            box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
         }
         input[type="number"] {
             width: 60px;
@@ -132,6 +105,7 @@
             padding: 4px 0;
             font-size: 14px;
             color: #475569;
+            margin-bottom: 6px;
         }
         #message.error {
             color: #dc2626;
@@ -142,7 +116,11 @@
         #userInfo {
             font-weight: 500;
             color: #0f172a;
-            margin-left: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1 1 auto;
+            min-width: 0;
         }
         /* 搜索 */
         #search-section {
@@ -155,7 +133,7 @@
         #search-section select {
             flex-shrink: 0;
             width: auto;
-            min-width: 100px;
+            min-width: 80px;
         }
         #searchInput {
             flex: 1 1 200px;
@@ -176,7 +154,8 @@
             border-collapse: collapse;
             font-size: 13px;
         }
-        th, td {
+        th,
+        td {
             padding: 6px 12px;
             text-align: left;
             border-bottom: 1px solid #e9edf2;
@@ -211,12 +190,6 @@
         td .desc-cell {
             cursor: pointer;
             color: #2563eb;
-            max-width: 180px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            display: inline-block;
-            vertical-align: bottom;
         }
         td .desc-cell:hover {
             text-decoration: underline;
@@ -268,7 +241,7 @@
         .modal-overlay {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.4);
+            background: rgba(0, 0, 0, 0.4);
             display: none;
             align-items: center;
             justify-content: center;
@@ -285,7 +258,7 @@
             width: 100%;
             max-height: 80vh;
             padding: 20px 24px 24px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
         }
@@ -318,57 +291,75 @@
         }
         /* 移动端 */
         @media (max-width: 640px) {
-            #app { padding: 12px; }
-            .row { flex-direction: column; align-items: stretch; }
-            .row .flex-grow { min-width: auto; }
-            .row button { align-self: flex-start; }
-            #search-section { flex-wrap: wrap; }
-            #search-section select { min-width: 80px; }
-            #searchInput { min-width: 100px; }
-            td, th { padding: 4px 8px; font-size: 12px; }
-            td .pwd-cell { font-size: 12px; padding: 0 10px; }
-            #pagination { justify-content: center; }
+            #app {
+                padding: 12px;
+            }
+            .row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 8px;
+            }
+            .row .flex-grow {
+                min-width: auto;
+            }
+            /* 第二行（登录按钮+用户信息）强制水平 */
+            .row.login-row {
+                flex-direction: row !important;
+                flex-wrap: nowrap;
+                align-items: center;
+                gap: 8px 12px;
+            }
+            .row.login-row button {
+                flex-shrink: 0;
+            }
+            .row.login-row #userInfo {
+                flex: 1 1 auto;
+                min-width: 0;
+            }
+            #search-section {
+                flex-wrap: wrap;
+            }
+            #search-section select {
+                min-width: 60px;
+                flex-shrink: 0;
+            }
+            #searchInput {
+                min-width: 100px;
+            }
+            td,
+            th {
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+            td .pwd-cell {
+                font-size: 12px;
+                padding: 0 10px;
+            }
+            #pagination {
+                justify-content: center;
+            }
         }
         .hidden {
             display: none !important;
-        }
-
-        /* 强制第二行水平排列，不受媒体查询影响 */
-        .login-row {
-            display: flex;
-            flex-direction: row !important;    /* 覆盖移动端的 column */
-            flex-wrap: nowrap;
-            align-items: center;
-            gap: 8px 12px;                     /* 与其它行保持一致 */
-        }
-
-        .login-row button {
-            flex-shrink: 0;                    /* 按钮不压缩 */
-        }
-
-        .login-row #userInfo {
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            flex: 1 1 auto;
-            min-width: 0;                      /* 允许截断 */
         }
     </style>
 </head>
 <body>
     <div id="app">
-        <!-- 登录行 -->
-        <!-- 第一行：Token 输入框（无标签，placeholder 提示） -->
+        <!-- 第一行：Token 输入框（无标签） -->
         <div class="row">
             <input type="password" id="tokenInput" class="flex-grow" placeholder="请输入 Token" autocomplete="off">
         </div>
+
         <!-- 第二行：登录/注销按钮 + 用户信息 -->
         <div class="row login-row">
             <button id="loginBtn">登录</button>
             <span id="userInfo"></span>
         </div>
-        <!-- 消息 -->
+
+        <!-- 提示信息 -->
         <div id="message"></div>
+
         <!-- 搜索 -->
         <div id="search-section" class="hidden">
             <select id="searchColumn">
@@ -382,6 +373,7 @@
             <input type="text" id="searchInput" placeholder="搜索文件">
             <button id="searchBtn" class="secondary">搜索</button>
         </div>
+
         <!-- 表格 -->
         <div id="table-container" class="hidden">
             <div class="table-wrap">
@@ -401,13 +393,13 @@
             <div id="pagination" class="hidden">
                 <button id="prevPage" class="secondary">上一页</button>
                 <span>
-                    第 <input type="number" id="pageInput" min="1" value="1">
-                    / <span id="totalPages">0</span> 页
+                    第 <input type="number" id="pageInput" min="1" value="1"> / <span id="totalPages">0</span> 页
                     <button id="gotoBtn" class="secondary">跳转</button>
                 </span>
                 <button id="nextPage" class="secondary">下一页</button>
             </div>
         </div>
+
         <!-- dataHash -->
         <div id="dataHash" class="hidden">
             校验码: <span id="hashValue"></span>
@@ -510,15 +502,13 @@
                     false,
                     ['deriveKey']
                 );
-                const key = await crypto.subtle.deriveKey(
-                    {
+                const key = await crypto.subtle.deriveKey({
                         name: 'PBKDF2',
                         salt: salt,
                         iterations: iterations,
                         hash: 'SHA-256'
                     },
-                    keyMaterial,
-                    { name: 'AES-GCM', length: 256 },
+                    keyMaterial, { name: 'AES-GCM', length: 256 },
                     false,
                     ['decrypt']
                 );
@@ -527,8 +517,7 @@
 
             async function aesGcmDecrypt(key, iv, ciphertext) {
                 try {
-                    const plaintext = await crypto.subtle.decrypt(
-                        { name: 'AES-GCM', iv: iv },
+                    const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: iv },
                         key,
                         ciphertext
                     );
@@ -637,7 +626,7 @@
                     const name = f.name || '';
                     const path = f.path || '';
                     const pwd = f.pwd || '';
-                    const desc = f.desc || '';
+                    const fullDesc = f.desc || '';
                     const author = f.author || '';
                     const esc = s => String(s).replace(/[&<>"]/g, function(m) {
                         if (m === '&') return '&amp;';
@@ -646,7 +635,17 @@
                         if (m === '"') return '&quot;';
                         return m;
                     });
-                    const descDisplay = desc ? `<span class="desc-cell" data-desc="${esc(desc)}" data-name="${esc(name)}">${esc(desc)}</span>` : '';
+
+                    // ----- 修改开始：描述处理（按行截断）-----
+                    const lines = fullDesc.split('\n', 2);
+                    const firstLine = lines[0] ? lines[0].trim() : '';
+                    // 如果有多行（即 lines.length > 1），则添加省略号；否则不加
+                    const displayDesc = firstLine + (lines.length > 1 ? '…' : '');
+                    const descDisplay = displayDesc ?
+                        `<span class="desc-cell" data-desc="${esc(fullDesc)}" data-name="${esc(name)}">${esc(displayDesc)}</span>` :
+                        '';
+                    // ----- 修改结束 -----
+
                     html += `<tr>
                         <td>${esc(name)}</td>
                         <td>${esc(path)}</td>
@@ -657,6 +656,7 @@
                 }
                 tbody.innerHTML = html;
 
+                // 密码点击复制
                 document.querySelectorAll('.pwd-cell').forEach(el => {
                     el.addEventListener('click', function(e) {
                         const pwd = this.dataset.pwd;
@@ -666,6 +666,7 @@
                     });
                 });
 
+                // 描述点击弹窗
                 document.querySelectorAll('.desc-cell').forEach(el => {
                     el.addEventListener('click', function(e) {
                         const desc = this.dataset.desc || '';
@@ -731,16 +732,13 @@
                     isSearching = false;
                 } else {
                     filteredFiles = files.filter(f => {
-                        let value = '';
                         if (column === 'all') {
-                            // 搜索所有字段
                             return (f.name || '').toLowerCase().includes(query) ||
-                                   (f.path || '').toLowerCase().includes(query) ||
-                                   (f.pwd || '').toLowerCase().includes(query) ||
-                                   (f.desc || '').toLowerCase().includes(query) ||
-                                   (f.author || '').toLowerCase().includes(query);
+                                (f.path || '').toLowerCase().includes(query) ||
+                                (f.pwd || '').toLowerCase().includes(query) ||
+                                (f.desc || '').toLowerCase().includes(query) ||
+                                (f.author || '').toLowerCase().includes(query);
                         } else {
-                            // 指定字段
                             const field = f[column] || '';
                             return field.toLowerCase().includes(query);
                         }
@@ -1079,7 +1077,6 @@
                 }
             });
 
-            // 分页事件：上一页、下一页
             prevPage.addEventListener('click', function() {
                 if (currentPage > 1) {
                     currentPage--;
@@ -1095,7 +1092,6 @@
                 }
             });
 
-            // 页码输入框：Enter 触发跳转
             pageInput.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
@@ -1103,7 +1099,6 @@
                 }
             });
 
-            // 跳转按钮
             gotoBtn.addEventListener('click', goToPage);
 
             // 启动
