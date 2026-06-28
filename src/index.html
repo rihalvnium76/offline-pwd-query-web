@@ -1,0 +1,1095 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>离线查询</title>
+    <style>
+        /* 全局重置 & 基础 */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f8f9fa;
+            color: #1e293b;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 24px 20px 32px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            letter-spacing: -0.3px;
+        }
+        /* 顶部栏：登录区域 + 按钮 */
+        .login-area {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px 10px;
+            margin-bottom: 20px;
+            padding: 16px 0;
+            border-bottom: 1px solid #e9edf2;
+        }
+        .login-area label {
+            font-weight: 500;
+            font-size: 14px;
+            color: #475569;
+        }
+        .login-area input[type="password"] {
+            flex: 1 1 220px;
+            padding: 10px 14px;
+            border: 1px solid #d1d9e6;
+            border-radius: 8px;
+            font-size: 15px;
+            background: #fcfcfd;
+            transition: border-color 0.2s;
+            min-width: 160px;
+        }
+        .login-area input[type="password"]:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+        .login-area .btn {
+            padding: 10px 22px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 500;
+            background: #3b82f6;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s, opacity 0.2s;
+            white-space: nowrap;
+        }
+        .login-area .btn:hover:not(:disabled) {
+            background: #2563eb;
+        }
+        .login-area .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        .login-area .btn-outline {
+            background: transparent;
+            color: #475569;
+            border: 1px solid #d1d9e6;
+        }
+        .login-area .btn-outline:hover:not(:disabled) {
+            background: #f1f5f9;
+            border-color: #b0c0d0;
+        }
+        .login-area .btn-danger {
+            background: #ef4444;
+        }
+        .login-area .btn-danger:hover:not(:disabled) {
+            background: #dc2626;
+        }
+        .login-area .btn-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        /* 提示信息 */
+        .message {
+            min-height: 28px;
+            font-size: 14px;
+            margin: 8px 0 12px 0;
+            padding: 6px 0;
+        }
+        .message.error {
+            color: #dc2626;
+        }
+        .message.success {
+            color: #16a34a;
+        }
+        /* 校验码 */
+        .data-hash {
+            font-size: 13px;
+            color: #94a3b8;
+            word-break: break-all;
+            margin-bottom: 16px;
+            display: none;
+        }
+        .data-hash.visible {
+            display: block;
+        }
+        /* 工具栏（搜索 + 分页信息） */
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 16px 0 12px;
+        }
+        .toolbar .search-box {
+            flex: 1 1 200px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toolbar .search-box input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #d1d9e6;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fcfcfd;
+        }
+        .toolbar .search-box input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        .toolbar .pagination-info {
+            font-size: 14px;
+            color: #475569;
+            white-space: nowrap;
+        }
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+        .pagination-controls button {
+            padding: 6px 14px;
+            border: 1px solid #d1d9e6;
+            border-radius: 6px;
+            background: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .pagination-controls button:hover:not(:disabled) {
+            background: #f1f5f9;
+        }
+        .pagination-controls button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .pagination-controls .page-input {
+            width: 60px;
+            padding: 6px 8px;
+            text-align: center;
+            border: 1px solid #d1d9e6;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .pagination-controls span {
+            font-size: 14px;
+            color: #475569;
+        }
+        /* 表格容器 */
+        .table-wrap {
+            overflow-x: auto;
+            margin-top: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 600px;
+        }
+        th {
+            background: #f1f5f9;
+            text-align: left;
+            padding: 12px 12px;
+            font-weight: 600;
+            color: #1e293b;
+            border-bottom: 2px solid #e2e8f0;
+            position: sticky;
+            top: 0;
+            z-index: 2;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #edf2f7;
+            vertical-align: middle;
+            word-break: break-word;
+        }
+        tr:hover td {
+            background: #fafcff;
+        }
+        /* 密码样式 */
+        .pwd-badge {
+            background: #ebeef2;
+            border-radius: 12px;
+            padding: 2px 12px;
+            font-family: "SF Mono", "Menlo", monospace;
+            font-size: 13px;
+            display: inline-block;
+            cursor: pointer;
+            user-select: all;
+            transition: background 0.15s;
+            word-break: break-all;
+            max-width: 100%;
+        }
+        .pwd-badge:hover {
+            background: #d5dce4;
+        }
+        /* 描述列 单行截断 + 点击可弹窗 */
+        .desc-cell {
+            max-width: 200px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            color: #2563eb;
+        }
+        .desc-cell:hover {
+            text-decoration: underline;
+        }
+        .desc-cell.empty {
+            color: #94a3b8;
+            cursor: default;
+            text-decoration: none;
+        }
+        /* 表格占位 */
+        .no-data {
+            text-align: center;
+            padding: 30px 0;
+            color: #94a3b8;
+        }
+        /* 模态框 */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.45);
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .modal-box {
+            background: #fff;
+            max-width: 520px;
+            width: 92%;
+            border-radius: 16px;
+            padding: 24px 28px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-box .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .modal-box .modal-header h3 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+        .modal-box .modal-close {
+            background: none;
+            border: none;
+            font-size: 28px;
+            line-height: 1;
+            cursor: pointer;
+            color: #94a3b8;
+            padding: 0 4px;
+        }
+        .modal-box .modal-close:hover {
+            color: #1e293b;
+        }
+        .modal-box .modal-body {
+            overflow-y: auto;
+            flex: 1;
+            padding: 8px 0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-size: 15px;
+            line-height: 1.6;
+        }
+        .modal-box .modal-copy {
+            margin-top: 16px;
+            align-self: flex-end;
+            padding: 8px 20px;
+            background: #3b82f6;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .modal-box .modal-copy:hover {
+            background: #2563eb;
+        }
+        /* 响应式 */
+        @media (max-width: 640px) {
+            body {
+                padding: 12px;
+            }
+            .container {
+                padding: 16px 12px;
+            }
+            .login-area {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .login-area input[type="password"] {
+                flex: 1;
+                width: 100%;
+            }
+            .login-area .btn-group {
+                justify-content: flex-start;
+            }
+            .toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .pagination-controls {
+                justify-content: center;
+            }
+            .desc-cell {
+                max-width: 120px;
+            }
+            td {
+                padding: 8px 6px;
+            }
+            th {
+                padding: 8px 6px;
+            }
+            .modal-box {
+                padding: 20px 16px;
+            }
+        }
+        /* 隐藏辅助 */
+        .hidden {
+            display: none !important;
+        }
+        /* 按钮禁用状态 */
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>📄 离线数据查询</h1>
+
+    <!-- 登录区域 -->
+    <div class="login-area">
+        <label for="tokenInput">Token</label>
+        <input type="password" id="tokenInput" placeholder="请输入您的 Token" autocomplete="off">
+        <div class="btn-group">
+            <button class="btn" id="loginBtn">登录</button>
+            <button class="btn btn-outline btn-danger hidden" id="logoutBtn" disabled>退出</button>
+        </div>
+    </div>
+
+    <!-- 提示信息 -->
+    <div class="message" id="message"></div>
+
+    <!-- 数据校验码 -->
+    <div class="data-hash" id="dataHashDisplay"></div>
+
+    <!-- 表格工具栏 -->
+    <div class="toolbar hidden" id="toolbar">
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="🔍 搜索表格内容…">
+        </div>
+        <div class="pagination-info" id="paginationInfo">共 0 条</div>
+    </div>
+
+    <!-- 分页控件 -->
+    <div class="pagination-controls hidden" id="paginationControls">
+        <button id="prevPageBtn">上一页</button>
+        <span>第</span>
+        <input type="number" class="page-input" id="pageInput" min="1" value="1">
+        <span>/ <span id="totalPages">1</span> 页</span>
+        <button id="nextPageBtn">下一页</button>
+    </div>
+
+    <!-- 表格 -->
+    <div class="table-wrap hidden" id="tableWrap">
+        <table>
+            <thead>
+            <tr>
+                <th>名称</th>
+                <th>路径</th>
+                <th>密码</th>
+                <th>描述</th>
+                <th>作者</th>
+            </tr>
+            </thead>
+            <tbody id="tableBody">
+            </tbody>
+        </table>
+        <div class="no-data hidden" id="noDataMsg">暂无可访问的数据</div>
+    </div>
+</div>
+
+<!-- 描述模态框 -->
+<div class="modal-overlay" id="descModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h3>完整描述</h3>
+            <button class="modal-close" id="modalCloseBtn">&times;</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+        <button class="modal-copy" id="modalCopyBtn">复制描述</button>
+    </div>
+</div>
+
+<script>
+    (function() {
+        'use strict';
+
+        // ---------- DOM refs ----------
+        const tokenInput = document.getElementById('tokenInput');
+        const loginBtn = document.getElementById('loginBtn');
+        const logoutBtn = document.getElementById('logoutBtn');
+        const messageEl = document.getElementById('message');
+        const dataHashDisplay = document.getElementById('dataHashDisplay');
+        const toolbar = document.getElementById('toolbar');
+        const searchInput = document.getElementById('searchInput');
+        const paginationInfo = document.getElementById('paginationInfo');
+        const paginationControls = document.getElementById('paginationControls');
+        const tableWrap = document.getElementById('tableWrap');
+        const tableBody = document.getElementById('tableBody');
+        const noDataMsg = document.getElementById('noDataMsg');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const pageInput = document.getElementById('pageInput');
+        const totalPagesSpan = document.getElementById('totalPages');
+
+        // 模态框
+        const descModal = document.getElementById('descModal');
+        const modalBody = document.getElementById('modalBody');
+        const modalCloseBtn = document.getElementById('modalCloseBtn');
+        const modalCopyBtn = document.getElementById('modalCopyBtn');
+
+        // ---------- 全局状态 ----------
+        let dataBlocks = [];          // [{iv: Uint8Array, enc: Uint8Array}] 索引即 id
+        let dataHash = '';            // hex string
+        let currentToken = '';        // 明文 token
+        let files = [];              // 当前用户所有文件对象 (已排序)
+        let filteredFiles = [];      // 搜索过滤后的文件列表
+        let currentPage = 1;
+        const PAGE_SIZE = 100;
+        let isLoggedIn = false;
+        let isDataLoaded = false;
+        let isLoggingIn = false;
+
+        // ---------- 工具函数 ----------
+        function setMessage(text, isError = false) {
+            messageEl.textContent = text;
+            messageEl.className = 'message' + (isError ? ' error' : '');
+        }
+
+        function clearMessage() {
+            messageEl.textContent = '';
+            messageEl.className = 'message';
+        }
+
+        function showDataHash(hash) {
+            if (hash) {
+                dataHashDisplay.textContent = '数据文件校验码 (SHA-256): ' + hash;
+                dataHashDisplay.className = 'data-hash visible';
+            } else {
+                dataHashDisplay.className = 'data-hash';
+            }
+        }
+
+        // 禁用/启用登录相关
+        function setLoginEnabled(enabled) {
+            loginBtn.disabled = !enabled;
+            tokenInput.disabled = !enabled;
+        }
+
+        // 读取二进制小端 u16
+        function readUint16(buf, offset) {
+            return new DataView(buf, offset, 2).getUint16(0, true);
+        }
+
+        // 读取二进制小端 u32? 不需要，但可用。
+
+        // 将 ArrayBuffer 转换为 Uint8Array
+        function toUint8Array(buf) {
+            return new Uint8Array(buf);
+        }
+
+        // 将 Uint8Array 转换为 hex
+        function bufToHex(buf) {
+            return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+
+        // 字符串转 Uint8Array (UTF-8)
+        function strToU8(str) {
+            return new TextEncoder().encode(str);
+        }
+
+        // Uint8Array 转字符串 (UTF-8)
+        function u8ToStr(u8) {
+            return new TextDecoder().decode(u8);
+        }
+
+        // 拼接 Uint8Array
+        function concatU8(a, b) {
+            const res = new Uint8Array(a.length + b.length);
+            res.set(a, 0);
+            res.set(b, a.length);
+            return res;
+        }
+
+        // SHA-256 返回 hex
+        async function sha256Hex(data) {
+            const hash = await crypto.subtle.digest('SHA-256', data);
+            return bufToHex(new Uint8Array(hash));
+        }
+
+        // PBKDF2 派生 key
+        async function deriveKey(tokenBytes, salt) {
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                tokenBytes,
+                { name: 'PBKDF2' },
+                false,
+                ['deriveKey']
+            );
+            return crypto.subtle.deriveKey(
+                {
+                    name: 'PBKDF2',
+                    salt: salt,
+                    iterations: 600000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                { name: 'AES-GCM', length: 256 },
+                false,
+                ['decrypt']
+            );
+        }
+
+        // AES-GCM 解密，返回 ArrayBuffer
+        async function decryptAESGCM(key, iv, ciphertext) {
+            // ciphertext 包含 tag (16 字节最后)
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                ciphertext
+            );
+            return decrypted;
+        }
+
+        // ---------- 解析数据文件 data/data ----------
+        async function loadDataFile() {
+            try {
+                setMessage('正在加载数据文件……');
+                loginBtn.disabled = true;
+                tokenInput.disabled = true;
+
+                const resp = await fetch('data/data', {
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const arrayBuffer = await resp.arrayBuffer();
+                // 计算 hash
+                const hash = await sha256Hex(arrayBuffer);
+                dataHash = hash;
+                showDataHash(dataHash);
+
+                // 解析二进制
+                const data = new Uint8Array(arrayBuffer);
+                const blocks = [];
+                let offset = 0;
+                while (offset < data.length) {
+                    // 读取 size (u16)
+                    if (offset + 2 > data.length) throw new Error('数据格式错误：不足 size');
+                    const size = readUint16(data.buffer, offset);
+                    offset += 2;
+                    if (offset + size > data.length) throw new Error('数据格式错误：块大小超出');
+                    const encryptedData = data.slice(offset, offset + size);
+                    offset += size;
+                    if (encryptedData.length < 12) throw new Error('数据块过小，缺少 iv');
+                    const iv = encryptedData.slice(0, 12);
+                    const enc = encryptedData.slice(12);
+                    blocks.push({ iv, enc });
+                }
+                dataBlocks = blocks;
+                isDataLoaded = true;
+                setLoginEnabled(true);
+                clearMessage();
+
+                // 自动登录
+                const storedToken = localStorage.getItem('offlineQueryToken');
+                if (storedToken) {
+                    tokenInput.value = storedToken;
+                    await performLogin(storedToken, true); // silent auto
+                }
+            } catch (err) {
+                console.error('加载数据文件失败:', err);
+                setMessage('数据文件加载失败，请刷新页面重试或联系管理员', true);
+                setLoginEnabled(false);
+                isDataLoaded = false;
+                showDataHash('');
+            }
+        }
+
+        // ---------- 登录逻辑 ----------
+        async function performLogin(token, isAuto = false) {
+            if (isLoggingIn) return;
+            if (!isDataLoaded) {
+                setMessage('数据文件尚未加载，请稍后', true);
+                return;
+            }
+            // 如果已经登录，先退出再重新登录
+            if (isLoggedIn) {
+                doLogout();
+            }
+
+            isLoggingIn = true;
+            setLoginEnabled(false);
+            if (!isAuto) {
+                setMessage('正在解密用户数据……');
+            } else {
+                setMessage('自动登录中……');
+            }
+
+            try {
+                const tokenBytes = strToU8(token);
+                const tokenHash = await sha256Hex(tokenBytes);
+                const userFilePath = 'data/user/' + tokenHash;
+                const resp = await fetch(userFilePath, {
+                    cache: 'no-store',
+                    headers: { 'Cache-Control': 'no-cache' }
+                });
+                if (!resp.ok) {
+                    if (resp.status === 404) {
+                        throw new Error('Token 无效');
+                    }
+                    throw new Error('HTTP ' + resp.status);
+                }
+                const userEncrypted = new Uint8Array(await resp.arrayBuffer());
+                if (userEncrypted.length < 16 + 12) {
+                    throw new Error('用户数据格式错误');
+                }
+                const salt = userEncrypted.slice(0, 16);
+                const iv = userEncrypted.slice(16, 28);
+                const enc = userEncrypted.slice(28);
+
+                // 派生密钥
+                const key = await deriveKey(tokenBytes, salt);
+                let userPlain;
+                try {
+                    userPlain = await decryptAESGCM(key, iv, enc);
+                } catch (e) {
+                    throw new Error('解密失败，Token 可能无效');
+                }
+                // 解析 user: (groupId u16, groupKey u8[32])[]
+                const userView = new DataView(userPlain);
+                const userEntries = [];
+                let pos = 0;
+                while (pos + 2 + 32 <= userPlain.byteLength) {
+                    const groupId = userView.getUint16(pos, true);
+                    pos += 2;
+                    const groupKey = new Uint8Array(userPlain, pos, 32);
+                    pos += 32;
+                    userEntries.push({ groupId, groupKey });
+                }
+                if (userEntries.length === 0) {
+                    throw new Error('用户数据为空');
+                }
+
+                // 遍历 user，收集文件
+                const visited = new Set();
+                const fileList = [];
+                for (const entry of userEntries) {
+                    const { groupId, groupKey } = entry;
+                    if (groupId >= dataBlocks.length) {
+                        console.warn('groupId 超出 dataBlocks 范围:', groupId);
+                        continue;
+                    }
+                    const block = dataBlocks[groupId];
+                    if (!block) continue;
+                    let groupPlain;
+                    try {
+                        groupPlain = await decryptAESGCM(
+                            await crypto.subtle.importKey('raw', groupKey, { name: 'AES-GCM' }, false, ['decrypt']),
+                            block.iv,
+                            block.enc
+                        );
+                    } catch (e) {
+                        console.warn('解密 group 失败 id=', groupId, e);
+                        continue;
+                    }
+                    // 解析 group: (fileId u16, fileKey u8[32])[]
+                    const groupView = new DataView(groupPlain);
+                    let gpos = 0;
+                    while (gpos + 2 + 32 <= groupPlain.byteLength) {
+                        const fileId = groupView.getUint16(gpos, true);
+                        gpos += 2;
+                        const fileKey = new Uint8Array(groupPlain, gpos, 32);
+                        gpos += 32;
+                        if (visited.has(fileId)) continue;
+                        visited.add(fileId);
+                        if (fileId >= dataBlocks.length) {
+                            console.warn('fileId 超出 dataBlocks 范围:', fileId);
+                            continue;
+                        }
+                        const fBlock = dataBlocks[fileId];
+                        if (!fBlock) continue;
+                        let filePlain;
+                        try {
+                            filePlain = await decryptAESGCM(
+                                await crypto.subtle.importKey('raw', fileKey, { name: 'AES-GCM' }, false, ['decrypt']),
+                                fBlock.iv,
+                                fBlock.enc
+                            );
+                        } catch (e) {
+                            console.warn('解密 file 失败 id=', fileId, e);
+                            continue;
+                        }
+                        // 解析 file JSON (UTF-8)
+                        const jsonStr = u8ToStr(new Uint8Array(filePlain));
+                        let fileObj;
+                        try {
+                            fileObj = JSON.parse(jsonStr);
+                        } catch (e) {
+                            console.warn('解析 file JSON 失败 id=', fileId, e);
+                            continue;
+                        }
+                        // 确保字段存在
+                        fileObj = {
+                            name: fileObj.name || '',
+                            path: fileObj.path || '',
+                            pwd: fileObj.pwd || '',
+                            desc: fileObj.desc || '',
+                            author: fileObj.author || ''
+                        };
+                        fileList.push(fileObj);
+                    }
+                }
+
+                // 排序：按 path, name 升序
+                fileList.sort((a, b) => {
+                    const pa = a.path.toLowerCase(), pb = b.path.toLowerCase();
+                    if (pa !== pb) return pa < pb ? -1 : 1;
+                    const na = a.name.toLowerCase(), nb = b.name.toLowerCase();
+                    return na < nb ? -1 : (na > nb ? 1 : 0);
+                });
+
+                files = fileList;
+                currentToken = token;
+                isLoggedIn = true;
+
+                // 缓存 token
+                localStorage.setItem('offlineQueryToken', token);
+
+                // 显示退出按钮（启用）
+                logoutBtn.classList.remove('hidden');
+                logoutBtn.disabled = false;
+
+                // 渲染表格
+                applySearchAndRender();
+
+                clearMessage();
+                if (fileList.length === 0) {
+                    setMessage('暂无可访问的数据');
+                }
+                loginBtn.textContent = '切换登录';
+                setLoginEnabled(true);
+                isLoggingIn = false;
+
+            } catch (err) {
+                console.error('登录失败:', err);
+                setMessage(err.message || 'Token 无效或数据解密失败', true);
+                // 清除缓存的 token
+                localStorage.removeItem('offlineQueryToken');
+                // 重置 UI
+                resetUIafterLogout();
+                isLoggingIn = false;
+                setLoginEnabled(true);
+                // 如果是自动登录失败，清空输入框？
+                if (isAuto) {
+                    tokenInput.value = '';
+                }
+            }
+        }
+
+        // ---------- 退出 ----------
+        function doLogout() {
+            resetUIafterLogout();
+            localStorage.removeItem('offlineQueryToken');
+            currentToken = '';
+            isLoggedIn = false;
+            files = [];
+            filteredFiles = [];
+            currentPage = 1;
+            // 隐藏并禁用退出按钮
+            logoutBtn.classList.add('hidden');
+            logoutBtn.disabled = true;
+            loginBtn.textContent = '登录';
+            setLoginEnabled(true);
+            clearMessage();
+            // 隐藏表格
+            tableWrap.classList.add('hidden');
+            toolbar.classList.add('hidden');
+            paginationControls.classList.add('hidden');
+            noDataMsg.classList.add('hidden');
+            // 清空 table body
+            tableBody.innerHTML = '';
+            // 清空搜索
+            searchInput.value = '';
+        }
+
+        function resetUIafterLogout() {
+            // 隐藏表格相关
+            tableWrap.classList.add('hidden');
+            toolbar.classList.add('hidden');
+            paginationControls.classList.add('hidden');
+            noDataMsg.classList.add('hidden');
+            tableBody.innerHTML = '';
+            // 退出按钮已在 doLogout 中处理，此处不重复
+        }
+
+        // ---------- 渲染表格 (分页 + 搜索) ----------
+        function applySearchAndRender() {
+            if (!isLoggedIn) return;
+            const keyword = searchInput.value.trim().toLowerCase();
+            if (keyword === '') {
+                filteredFiles = files.slice();
+            } else {
+                filteredFiles = files.filter(f =>
+                    f.name.toLowerCase().includes(keyword) ||
+                    f.path.toLowerCase().includes(keyword) ||
+                    f.pwd.toLowerCase().includes(keyword) ||
+                    f.desc.toLowerCase().includes(keyword) ||
+                    f.author.toLowerCase().includes(keyword)
+                );
+            }
+            // 更新分页
+            const total = filteredFiles.length;
+            const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+            renderTablePage(currentPage, totalPages);
+            updatePaginationUI(totalPages);
+            // 显示表格
+            tableWrap.classList.remove('hidden');
+            toolbar.classList.remove('hidden');
+            paginationControls.classList.remove('hidden');
+            if (total === 0) {
+                noDataMsg.classList.remove('hidden');
+                tableBody.innerHTML = '';
+            } else {
+                noDataMsg.classList.add('hidden');
+            }
+        }
+
+        function renderTablePage(page, totalPages) {
+            const start = (page - 1) * PAGE_SIZE;
+            const end = Math.min(start + PAGE_SIZE, filteredFiles.length);
+            const pageData = filteredFiles.slice(start, end);
+            const tbody = tableBody;
+            tbody.innerHTML = '';
+            if (pageData.length === 0 && filteredFiles.length > 0) {
+                // 无数据但总数不为0 (可能页码超出)
+                return;
+            }
+            for (const f of pageData) {
+                const tr = document.createElement('tr');
+                // 名称
+                const tdName = document.createElement('td');
+                tdName.textContent = f.name || '-';
+                // 路径
+                const tdPath = document.createElement('td');
+                tdPath.textContent = f.path || '-';
+                // 密码
+                const tdPwd = document.createElement('td');
+                if (f.pwd) {
+                    const span = document.createElement('span');
+                    span.className = 'pwd-badge';
+                    span.textContent = f.pwd;
+                    span.title = '点击复制密码';
+                    span.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        copyToClipboard(f.pwd, '已复制密码到剪贴板');
+                    });
+                    tdPwd.appendChild(span);
+                } else {
+                    tdPwd.textContent = '-';
+                }
+                // 描述
+                const tdDesc = document.createElement('td');
+                tdDesc.className = 'desc-cell' + (f.desc ? '' : ' empty');
+                tdDesc.textContent = f.desc || '无描述';
+                if (f.desc) {
+                    tdDesc.addEventListener('click', function() {
+                        openDescModal(f.desc);
+                    });
+                }
+                // 作者
+                const tdAuthor = document.createElement('td');
+                tdAuthor.textContent = f.author || '-';
+
+                tr.appendChild(tdName);
+                tr.appendChild(tdPath);
+                tr.appendChild(tdPwd);
+                tr.appendChild(tdDesc);
+                tr.appendChild(tdAuthor);
+                tbody.appendChild(tr);
+            }
+            // 更新分页信息
+            paginationInfo.textContent = `共 ${filteredFiles.length} 条`;
+        }
+
+        function updatePaginationUI(totalPages) {
+            totalPagesSpan.textContent = totalPages;
+            pageInput.value = currentPage;
+            pageInput.min = 1;
+            pageInput.max = totalPages;
+            prevPageBtn.disabled = (currentPage <= 1);
+            nextPageBtn.disabled = (currentPage >= totalPages);
+        }
+
+        // ---------- 分页事件 ----------
+        function goToPage(page) {
+            const total = filteredFiles.length;
+            const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+            if (page < 1) page = 1;
+            if (page > totalPages) page = totalPages;
+            if (page !== currentPage) {
+                currentPage = page;
+                renderTablePage(currentPage, totalPages);
+                updatePaginationUI(totalPages);
+            }
+        }
+
+        // ---------- 复制到剪贴板 ----------
+        function copyToClipboard(text, successMsg) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    setMessage(successMsg || '已复制');
+                    setTimeout(clearMessage, 2000);
+                }).catch(() => {
+                    fallbackCopy(text, successMsg);
+                });
+            } else {
+                fallbackCopy(text, successMsg);
+            }
+        }
+
+        function fallbackCopy(text, successMsg) {
+            // 使用textarea选中复制
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try {
+                document.execCommand('copy');
+                setMessage(successMsg || '已复制');
+                setTimeout(clearMessage, 2000);
+            } catch (e) {
+                setMessage('复制失败，请手动选择复制', true);
+            }
+            document.body.removeChild(ta);
+        }
+
+        // ---------- 描述模态框 ----------
+        let currentDescText = '';
+
+        function openDescModal(text) {
+            currentDescText = text;
+            modalBody.textContent = text;
+            descModal.classList.add('active');
+        }
+
+        function closeDescModal() {
+            descModal.classList.remove('active');
+        }
+
+        modalCloseBtn.addEventListener('click', closeDescModal);
+        descModal.addEventListener('click', function(e) {
+            if (e.target === descModal) closeDescModal();
+        });
+        modalCopyBtn.addEventListener('click', function() {
+            copyToClipboard(currentDescText, '已复制描述');
+        });
+
+        // ---------- 事件绑定 ----------
+        loginBtn.addEventListener('click', function() {
+            const token = tokenInput.value.trim();
+            if (!token) {
+                setMessage('请输入 Token', true);
+                return;
+            }
+            performLogin(token, false);
+        });
+
+        logoutBtn.addEventListener('click', function() {
+            doLogout();
+        });
+
+        // 搜索输入防抖
+        let searchTimer = null;
+        searchInput.addEventListener('input', function() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => {
+                if (isLoggedIn) {
+                    currentPage = 1;
+                    applySearchAndRender();
+                }
+            }, 300);
+        });
+
+        prevPageBtn.addEventListener('click', function() {
+            if (currentPage > 1) goToPage(currentPage - 1);
+        });
+        nextPageBtn.addEventListener('click', function() {
+            const total = filteredFiles.length;
+            const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+            if (currentPage < totalPages) goToPage(currentPage + 1);
+        });
+        pageInput.addEventListener('change', function() {
+            let val = parseInt(pageInput.value, 10);
+            if (isNaN(val) || val < 1) val = 1;
+            const total = filteredFiles.length;
+            const totalPages = Math.ceil(total / PAGE_SIZE) || 1;
+            if (val > totalPages) val = totalPages;
+            goToPage(val);
+        });
+
+        // 按回车触发登录
+        tokenInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                loginBtn.click();
+            }
+        });
+
+        // ---------- 初始化 ----------
+        loadDataFile();
+
+        // 暴露一些全局用于调试（可删）
+        window.__debug = { dataBlocks, files, filteredFiles };
+
+    })();
+</script>
+</body>
+</html>
