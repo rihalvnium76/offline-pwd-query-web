@@ -307,22 +307,26 @@ def download_dependencies(lib_dir: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="资源文件管理工具")
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('-u', '--update', nargs='?', const='./lib/', default=None,
-                       metavar='LIB_DIR', help='下载更新依赖到 LIB_DIR (默认 ./lib/)')
-    group.add_argument('-c', '--convert', nargs='*', metavar=('INPUT_FILE', 'DATA_DIR'),
-                       help='转换数据文件: INPUT_FILE (默认 ./data.toml) 和 DATA_DIR (默认 ./data/)')
-
+    # 两个选项不再互斥，可以同时使用
+    parser.add_argument('-u', '--update', nargs='?', const='./lib/', default=None,
+                        metavar='LIB_DIR', help='下载更新依赖到 LIB_DIR (默认 ./lib/)')
+    parser.add_argument('-c', '--convert', nargs='*', metavar=('INPUT_FILE', 'DATA_DIR'),
+                        help='转换数据文件: INPUT_FILE (默认 ./data.toml) 和 DATA_DIR (默认 ./data/)')
     parser.add_argument('-y', '--yes', action='store_true', help='静默删除并重建 DATA_DIR (仅用于 -c)')
 
     args = parser.parse_args()
 
+    # 如果没有任何操作，显示帮助
+    if args.update is None and args.convert is None:
+        parser.print_help()
+        sys.exit(0)
+
+    # 1. 执行 -u（下载依赖）
     if args.update is not None:
-        # -u 模式：update 参数可能是 None（如果用户只写了 -u 没有值），但 nargs='?' 会捕获
         lib_dir = Path(args.update) if args.update else Path('./lib/')
         download_dependencies(lib_dir)
-        return
 
+    # 2. 执行 -c（转换数据）
     if args.convert is not None:
         args_list = args.convert
         if len(args_list) == 0:
@@ -337,11 +341,7 @@ def main():
         else:
             print("错误: -c 接受最多两个参数", file=sys.stderr)
             sys.exit(1)
-
         convert_data(input_file, data_dir, args.yes)
-        return
-
-    parser.print_help()
 
 
 if __name__ == '__main__':
