@@ -116,7 +116,7 @@
         2. `encryptedFile = data[fileId]`
         3. 用 `fileKey` 对 `encryptedFile` 进行 AES-256-GCM 解密，反序列化后得到 `file`
         4. 添加 `file` 到 `files`
-7. 若 `files` 非空，则将 `files` 按 `File.path`、`File.name` 进行升序排序，然后显示到文件表格中
+7. 若 `files` 非空，则将 `files` 按 `file.path`、`file.name` 进行升序排序，然后显示到文件表格中
 8. 现在是登陆成功状态。将当前登录的 Token 明文存入 `localStorage`
 
 ## UI
@@ -142,11 +142,11 @@
     - 搜索结果为空时，表格无内容，而不是列出全部文件
 - 文件表格
     - 列：
-        - 名称（`File.name`）
-        - 路径（`File.path`）
-        - 密码（`File.pwd`）
-        - 描述（`File.desc`）
-        - 作者（`File.author`）
+        - 名称（`file.name`）
+        - 路径（`file.path`）
+        - 密码（`file.pwd`）
+        - 描述（`file.desc`）
+        - 作者（`file.author`）
     - 密码列：文本背景色（非整个单元格的背景色）`#EBEEF2`，圆角，点击复制（复制成功提示“已复制密码到剪贴板”），支持移动端手动选择复制（适配移动端某些 Clipboard API 失效的场景）
     - 描述列：描述截断到第一行行尾，点击弹出模态框，标题为文件名，完整描述可复制
         - 截断到第一行行尾的代码参考：`const lines = (fullDesc == null ? '' : fullDesc).split('\n', 2); const firstLine = lines[0] ? lines[0].trim() : ''; const displayDesc = firstLine + (lines.length > 1 ? '…' : '')`
