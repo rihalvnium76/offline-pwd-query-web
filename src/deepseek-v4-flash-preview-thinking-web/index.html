@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>数据查询</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            padding: 12px 16px 20px;
+            line-height: 1.4;
+            font-size: 14px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .flex-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+        .hidden { display: none !important; }
+        .text-muted { color: #64748b; }
+        .text-danger { color: #b91c1c; }
+
+        .card {
+            background: #fff;
+            padding: 8px 12px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 8px;
+        }
+
+        input, select, button {
+            font: inherit;
+            font-size: 14px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            padding: 6px 10px;
+            outline: none;
+            transition: border-color 0.15s;
+        }
+        input:focus, select:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59,130,246,0.2); }
+        button {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+            cursor: pointer;
+            padding: 6px 14px;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+        button:hover:not(:disabled) { background: #d1d5db; }
+        button.primary { background: #3b82f6; border-color: #2563eb; color: #fff; }
+        button.primary:hover:not(:disabled) { background: #2563eb; }
+        button.danger { background: #ef4444; border-color: #dc2626; color: #fff; }
+        button.danger:hover:not(:disabled) { background: #dc2626; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        input[type="password"] { min-width: 180px; flex: 1 1 200px; }
+
+        .token-area { padding: 10px 12px; }
+        .token-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 12px;
+        }
+        .token-row .user-info {
+            font-weight: 500;
+            color: #0f172a;
+            margin-left: auto;
+            white-space: nowrap;
+        }
+
+        .msg-area {
+            min-height: 1.8em;
+            padding: 6px 12px;
+            font-size: 14px;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px 10px;
+        }
+        .msg-area .text-danger { font-weight: 500; }
+
+        .search-area { padding: 8px 12px; }
+        .search-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 10px;
+        }
+        .search-row .search-input-group {
+            display: flex;
+            flex: 1 1 240px;
+            gap: 6px;
+        }
+        .search-row .search-input-group input { flex: 1; min-width: 120px; }
+        /* 移动端适配：三个下拉框一行，搜索框和按钮下一行 */
+        @media (max-width: 640px) {
+            .search-row .search-target,
+            .search-row .search-scope,
+            .search-row .search-type {
+                flex: 1 1 30%;
+                min-width: 0;
+            }
+            .search-row .search-input-group {
+                flex-basis: 100%;
+                margin-top: 4px;
+            }
+        }
+
+        .breadcrumb-area {
+            background: #fff;
+            padding: 6px 12px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin-bottom: 8px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 6px 10px;
+            font-size: 14px;
+        }
+        .breadcrumb-area .crumb-path {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 2px 4px;
+            flex: 1;
+            word-break: break-all;
+        }
+        .breadcrumb-area .crumb-path .sep { color: #94a3b8; }
+        .breadcrumb-area .crumb-path .dir-link {
+            color: #3b82f6;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .breadcrumb-area .crumb-path .dir-link:hover { text-decoration: underline; }
+        .breadcrumb-area .crumb-path .current {
+            font-weight: 500;
+            color: #0f172a;
+            cursor: pointer;
+        }
+        .breadcrumb-area .crumb-path .current:hover {
+            text-decoration: underline;
+        }
+
+        .table-wrap {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .table-scroll {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            min-width: 700px;
+            table-layout: auto;
+        }
+        th {
+            background: #f1f5f9;
+            text-align: left;
+            padding: 8px 12px;
+            font-weight: 600;
+            border-bottom: 1px solid #e2e8f0;
+            white-space: nowrap;
+        }
+        td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
+            word-break: break-word;
+        }
+        tr:hover td { background: #f8fafc; }
+        .name-cell { font-weight: 500; cursor: default; }
+        .dir-name {
+            color: #0f172a;
+            cursor: pointer;
+        }
+        .dir-name:hover { text-decoration: underline; }
+        .file-name {
+            color: #1e293b;
+            cursor: pointer;
+        }
+        .file-name:hover { text-decoration: underline; }
+        .pwd-cell {
+            background: #ebeff2;
+            border-radius: 6px;
+            padding: 2px 8px;
+            display: inline-block;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 13px;
+            user-select: all;
+        }
+        .pwd-cell:hover { background: #dbe0e5; }
+        .desc-cell {
+            cursor: pointer;
+            color: #3b82f6;
+        }
+        .desc-cell:hover { text-decoration: underline; }
+        .loc-cell {
+            word-break: break-word;
+            cursor: pointer;
+        }
+        .loc-cell:hover { text-decoration: underline; }
+        .author-cell { word-break: break-word; }
+
+        .pagination {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px 12px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+        .pagination input[type="number"] {
+            width: 52px;
+            padding: 4px 6px;
+            text-align: center;
+            -moz-appearance: textfield;
+        }
+        .pagination input[type="number"]::-webkit-inner-spin-button,
+        .pagination input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        #pageSizeInput {
+            width: 60px;
+            padding: 4px 6px;
+            text-align: center;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+        .modal-box {
+            background: #fff;
+            border-radius: 12px;
+            max-width: 500px;
+            width: 100%;
+            padding: 20px 24px 24px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-box .modal-title { font-weight: 600; font-size: 16px; margin-bottom: 8px; word-break: break-all; }
+        .modal-box .modal-body {
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            padding: 8px 0 12px;
+            flex: 1;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .modal-box .modal-close { align-self: flex-end; margin-top: 8px; }
+
+        .footer-hash {
+            margin-top: 16px;
+            text-align: right;
+            font-size: 12px;
+            color: #94a3b8;
+            word-break: break-all;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 8px;
+        }
+        .empty-state { padding: 20px 12px; text-align: center; color: #94a3b8; }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 14px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show { opacity: 1; }
+
+        @media (max-width: 480px) {
+            body { padding: 8px 10px; }
+            .token-row { flex-wrap: wrap; }
+            #tokenInput {
+                flex: 0 0 100% !important;
+                min-width: unset;
+            }
+            .token-row .user-info {
+                margin-left: 0;
+            }
+            .pagination { justify-content: center; }
+            td, th { padding: 6px 8px; font-size: 13px; }
+            .breadcrumb-area { font-size: 13px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container" id="app">
+    <div class="token-area card">
+        <div class="token-row">
+            <input type="password" id="tokenInput" placeholder="请输入 Token" autocomplete="off" spellcheck="false">
+            <button id="loginBtn" class="primary">登录</button>
+            <span class="user-info" id="userInfo"></span>
+        </div>
+    </div>
+    <div class="msg-area" id="msgArea"></div>
+    <div class="search-area card hidden" id="searchArea">
+        <div class="search-row">
+            <select id="searchTarget" class="search-target">
+                <option value="all">全部列</option>
+                <option value="path_exact">精确路径</option>
+                <option value="path">路径</option>
+                <option value="name">名称</option>
+                <option value="loc">位置</option>
+                <option value="pwd">密码</option>
+                <option value="desc">描述</option>
+                <option value="author">作者</option>
+            </select>
+            <select id="searchScope" class="search-scope">
+                <option value="global">全局</option>
+                <option value="current">当前目录</option>
+                <option value="subtree">当前及子目录</option>
+            </select>
+            <!-- 新增搜索类型下拉框 -->
+            <select id="searchType" class="search-type">
+                <option value="all">全部</option>
+                <option value="files">仅文件</option>
+                <option value="dirs">仅目录</option>
+            </select>
+            <div class="search-input-group">
+                <input type="text" id="searchQuery" placeholder="搜索关键字" spellcheck="false">
+                <button id="searchBtn">搜索</button>
+            </div>
+        </div>
+    </div>
+    <div class="breadcrumb-area hidden" id="breadcrumbArea">
+        <button id="upBtn">上一级</button>
+        <button id="rootBtn">根目录</button>
+        <div class="crumb-path" id="crumbPath"></div>
+    </div>
+    <div class="table-wrap hidden" id="tableWrap">
+        <div class="table-scroll">
+            <table>
+                <thead><tr><th>名称</th><th>位置</th><th>密码</th><th>描述</th><th>作者</th></tr></thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+        <div class="pagination" id="pagination">
+            <button id="prevPageBtn">上一页</button>
+            <span>第 <input type="number" id="pageInput" value="1" min="1"> / <span id="totalPages">1</span> 页</span>
+            <button id="gotoBtn">跳转</button>
+            <button id="nextPageBtn">下一页</button>
+            <span>每页 <input type="number" id="pageSizeInput" value="100" min="0" step="1"> 条</span>
+        </div>
+    </div>
+    <div class="footer-hash hidden" id="footerHash"></div>
+</div>
+<div id="modalContainer"></div>
+<div id="toast" class="toast"></div>
+<script src="lib/msgpack.min.js"></script>
+<script>
+    (function() {
+        'use strict';
+
+        const state = {
+            data: null, dataHash: null, user: null, files: [],
+            tree: null, nodeMap: null, currentPath: '/',
+            isSearching: false, searchResults: null,
+            token: null, loggedIn: false,
+            pageSize: 100,
+            currentPage: 1,
+            totalPages: 1,
+            searchCount: 0,
+        };
+        const DECRYPT_BATCH_SIZE = 5;
+
+        const $ = id => document.getElementById(id);
+        const tokenInput = $('tokenInput');
+        const loginBtn = $('loginBtn');
+        const userInfo = $('userInfo');
+        const msgArea = $('msgArea');
+        const searchArea = $('searchArea');
+        const searchTarget = $('searchTarget');
+        const searchScope = $('searchScope');
+        const searchType = $('searchType');
+        const searchQuery = $('searchQuery');
+        const searchBtn = $('searchBtn');
+        const breadcrumbArea = $('breadcrumbArea');
+        const upBtn = $('upBtn');
+        const rootBtn = $('rootBtn');
+        const crumbPath = $('crumbPath');
+        const tableWrap = $('tableWrap');
+        const tableBody = $('tableBody');
+        const prevPageBtn = $('prevPageBtn');
+        const nextPageBtn = $('nextPageBtn');
+        const pageInput = $('pageInput');
+        const totalPagesSpan = $('totalPages');
+        const gotoBtn = $('gotoBtn');
+        const pageSizeInput = $('pageSizeInput');
+        const footerHash = $('footerHash');
+        const modalContainer = $('modalContainer');
+        const toastEl = $('toast');
+        let toastTimer = null;
+
+        function showToast(msg) {
+            toastEl.textContent = msg;
+            toastEl.classList.add('show');
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2500);
+        }
+
+        function setMsg(text, isError = false, extra = '') {
+            let fullText = text;
+            if (extra) fullText += ' ' + extra;
+            msgArea.textContent = fullText;
+            msgArea.className = 'msg-area' + (isError ? ' text-danger' : '');
+        }
+        function clearMsg() {
+            msgArea.textContent = '';
+            msgArea.className = 'msg-area';
+        }
+
+        function toUrlSafeBase64(uint8) {
+            let base64 = btoa(String.fromCharCode.apply(null, uint8));
+            return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        async function sha256(data) {
+            const buf = await crypto.subtle.digest('SHA-256', data);
+            return new Uint8Array(buf);
+        }
+        async function pbkdf2(tokenBytes, salt) {
+            const keyMaterial = await crypto.subtle.importKey('raw', tokenBytes, 'PBKDF2', false, ['deriveBits']);
+            const bits = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt: salt, iterations: 600000, hash: 'SHA-256' },
+                keyMaterial, 256
+            );
+            return new Uint8Array(bits);
+        }
+        async function aesGcmDecrypt(key, nonce, ciphertextWithTag) {
+            if (ciphertextWithTag.length < 16) throw new Error('密文太短');
+            const tag = ciphertextWithTag.slice(-16);
+            const ciphertext = ciphertextWithTag.slice(0, -16);
+            const cryptoKey = await crypto.subtle.importKey('raw', key, { name: 'AES-GCM' }, false, ['decrypt']);
+            const plaintext = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+                cryptoKey,
+                new Uint8Array([...ciphertext, ...tag])
+            );
+            return new Uint8Array(plaintext);
+        }
+        function msgpackDecode(data) {
+            if (typeof MessagePack === 'undefined') throw new Error('MessagePack 库未加载');
+            return MessagePack.decode(data);
+        }
+
+        function normalizePath(p) { p = p.trim(); if (!p.startsWith('/')) p = '/' + p; return p.replace(/\/+/g, '/'); }
+        function parentPath(p) {
+            if (p === '/') return '/';
+            let trimmed = p.endsWith('/') ? p.slice(0, -1) : p;
+            let lastSlash = trimmed.lastIndexOf('/');
+            return lastSlash <= 0 ? '/' : trimmed.slice(0, lastSlash + 1);
+        }
+
+        function buildTree(files) {
+            const root = { type: 'dir', name: '', path: '/', parent: null, children: new Map(), files: [] };
+            const nodeMap = new Map(); nodeMap.set('/', root);
+            const paths = files.map(f => f.path).sort();
+            for (const filePath of paths) {
+                const parts = filePath.split('/').filter(p => p !== '');
+                let current = root, currentPath = '/';
+                for (let i = 0; i < parts.length - 1; i++) {
+                    const part = parts[i];
+                    const nextPath = currentPath + part + '/';
+                    if (!current.children.has(part)) {
+                        const dirNode = { type: 'dir', name: part, path: nextPath, parent: current, children: new Map(), files: [] };
+                        current.children.set(part, dirNode);
+                        nodeMap.set(nextPath, dirNode);
+                    }
+                    current = current.children.get(part);
+                    currentPath = nextPath;
+                }
+                const fileName = parts[parts.length - 1];
+                const fileNode = {
+                    type: 'file', name: fileName, path: filePath, parent: current,
+                    fileData: files.find(f => f.path === filePath)
+                };
+                current.files.push(fileNode);
+                nodeMap.set(filePath, fileNode);
+            }
+            return { root, nodeMap };
+        }
+
+        function getDirEntries(dirPath, nodeMap) {
+            const node = nodeMap.get(dirPath);
+            if (!node || node.type !== 'dir') return [];
+            const entries = [];
+            for (const [, child] of node.children) entries.push({ type: 'dir', name: child.name, path: child.path, node: child });
+            for (const fileNode of node.files) entries.push({ type: 'file', name: fileNode.name, path: fileNode.path, node: fileNode, fileData: fileNode.fileData });
+            entries.sort((a, b) => {
+                if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
+                return a.name.localeCompare(b.name);
+            });
+            return entries;
+        }
+
+        function getCurrentEntries() {
+            if (state.isSearching) {
+                return state.searchResults.map(item => {
+                    if (item.type === 'dir') {
+                        let displayName = item.path === '/' ? '/' : item.name;
+                        return {
+                            type: 'dir',
+                            name: displayName,
+                            path: item.path,
+                            node: item.node,
+                            isSearchResult: true
+                        };
+                    } else {
+                        return {
+                            type: 'file',
+                            name: item.path,
+                            path: item.path,
+                            fileData: item.fileData,
+                            isSearchResult: true
+                        };
+                    }
+                });
+            }
+            if (!state.nodeMap) return [];
+            return getDirEntries(state.currentPath, state.nodeMap);
+        }
+
+        function getAllFilesUnder(path) {
+            const result = [];
+            const node = state.nodeMap.get(path);
+            if (!node) return result;
+            function traverse(n) {
+                if (n.type === 'file') result.push(n.fileData);
+                else {
+                    for (const [, child] of n.children) traverse(child);
+                    for (const f of n.files) result.push(f.fileData);
+                }
+            }
+            traverse(node);
+            return result;
+        }
+
+        function getAllDirNodes() {
+            const result = [];
+            if (!state.nodeMap) return result;
+            for (const [path, node] of state.nodeMap) {
+                if (node.type === 'dir' && path !== '/') {
+                    result.push({ type: 'dir', name: node.name, path: path, node: node });
+                }
+            }
+            return result;
+        }
+
+        function isPathUnder(path, parent) {
+            if (parent === '/') return true;
+            if (path === parent) return true;
+            if (!parent.endsWith('/')) parent += '/';
+            return path.startsWith(parent);
+        }
+
+        // ---------- 登录 ----------
+        async function login(token) {
+            try {
+                setMsg('正在验证 Token...');
+                loginBtn.disabled = true;
+                const tokenBytes = new TextEncoder().encode(token);
+                const tokenHash = toUrlSafeBase64(await sha256(tokenBytes));
+                const resp = await fetch(`data/user/${tokenHash}`, { cache: 'no-store' });
+                if (!resp.ok) {
+                    if (resp.status === 404) throw new Error('Token 无效（用户文件不存在）');
+                    throw new Error(`加载用户数据失败 (HTTP ${resp.status})`);
+                }
+                const userFileBuf = await resp.arrayBuffer();
+                let encryptedUser;
+                try { encryptedUser = msgpackDecode(new Uint8Array(userFileBuf)); } catch (e) { throw new Error('用户数据格式错误'); }
+                if (!Array.isArray(encryptedUser) || encryptedUser.length !== 3) throw new Error('用户数据格式无效');
+                const [salt, nonce, ciphertextWithTag] = encryptedUser;
+                const key = await pbkdf2(tokenBytes, salt);
+                const userPlain = await aesGcmDecrypt(key, nonce, ciphertextWithTag);
+                let user;
+                try { user = msgpackDecode(userPlain); } catch (e) { throw new Error('用户数据解密失败，可能 Token 错误'); }
+                if (!user || typeof user !== 'object' || !user.name || !Array.isArray(user.groups)) {
+                    throw new Error('用户数据结构无效');
+                }
+
+                const groups = user.groups;
+                if (groups.length === 0) {
+                    state.user = user;
+                    state.files = [];
+                    state.loggedIn = true;
+                    state.token = token;
+                    finishLogin(user);
+                    return;
+                }
+
+                const groupTasks = groups.map(([groupId, groupKey]) => async () => {
+                    const encGroup = state.data[groupId];
+                    if (!encGroup) throw new Error(`Group ${groupId} 不存在`);
+                    const [gNonce, gCipher] = encGroup;
+                    const plain = await aesGcmDecrypt(groupKey, gNonce, gCipher);
+                    const group = msgpackDecode(plain);
+                    if (!Array.isArray(group)) throw new Error(`Group ${groupId} 格式无效`);
+                    return { groupId, groupKey, group };
+                });
+
+                setMsg('正在解密用户数据... (Groups)');
+                const groupResults = [];
+                for (let i = 0; i < groupTasks.length; i += DECRYPT_BATCH_SIZE) {
+                    const batch = groupTasks.slice(i, i + DECRYPT_BATCH_SIZE);
+                    const results = await Promise.all(batch.map(fn => fn()));
+                    groupResults.push(...results);
+                    setMsg(`正在解密用户数据... (Groups ${Math.min(i + DECRYPT_BATCH_SIZE, groupTasks.length)}/${groupTasks.length})`);
+                }
+
+                const fileTasks = [];
+                const visited = new Set();
+                for (const gr of groupResults) {
+                    for (const [fileId, fileKey] of gr.group) {
+                        if (visited.has(fileId)) continue;
+                        visited.add(fileId);
+                        const encFile = state.data[fileId];
+                        if (!encFile) { console.warn(`File ${fileId} 不存在，跳过`); continue; }
+                        fileTasks.push(async () => {
+                            const [fNonce, fCipher] = encFile;
+                            const plain = await aesGcmDecrypt(fileKey, fNonce, fCipher);
+                            const file = msgpackDecode(plain);
+                            if (!file || typeof file !== 'object' || !file.path) throw new Error(`File ${fileId} 格式无效`);
+                            return file;
+                        });
+                    }
+                }
+
+                const files = [];
+                const totalFiles = fileTasks.length;
+                for (let i = 0; i < fileTasks.length; i += DECRYPT_BATCH_SIZE) {
+                    const batch = fileTasks.slice(i, i + DECRYPT_BATCH_SIZE);
+                    const results = await Promise.all(batch.map(fn => fn()));
+                    files.push(...results);
+                    setMsg(`正在解密用户数据... (Files ${Math.min(i + DECRYPT_BATCH_SIZE, totalFiles)}/${totalFiles})`);
+                }
+
+                for (const f of files) {
+                    const p = f.path;
+                    if (!p.startsWith('/')) throw new Error(`路径必须以 / 开头: ${p}`);
+                    if (p.endsWith('/')) throw new Error(`文件路径不能以 / 结尾: ${p}`);
+                    if (p.includes('\\')) throw new Error(`路径不能包含反斜杠: ${p}`);
+                }
+
+                state.user = user;
+                state.files = files;
+                state.loggedIn = true;
+                state.token = token;
+                finishLogin(user);
+            } catch (err) {
+                setMsg(`登录失败: ${err.message}`, true);
+                loginBtn.disabled = false;
+                state.loggedIn = false;
+                state.token = null;
+                localStorage.removeItem('token');
+                hideAllUI();
+            }
+        }
+
+        function finishLogin(user) {
+            clearMsg();
+            if (state.files.length === 0) {
+                setMsg('暂无可访问的数据', false);
+            }
+
+            loginBtn.textContent = '注销';
+            loginBtn.className = 'danger';
+            userInfo.textContent = user.name || '';
+            const { root, nodeMap } = buildTree(state.files);
+            state.tree = root;
+            state.nodeMap = nodeMap;
+            state.currentPath = '/';
+            state.isSearching = false;
+            state.searchResults = null;
+            localStorage.setItem('token', state.token);
+            showUI();
+            renderCurrentView();
+            if (state.dataHash) {
+                footerHash.textContent = '数据校验码: ' + state.dataHash;
+                footerHash.classList.remove('hidden');
+            } else {
+                footerHash.classList.add('hidden');
+            }
+            loginBtn.disabled = false;
+        }
+
+        function logout() {
+            state.loggedIn = false;
+            state.token = null;
+            state.user = null;
+            state.files = [];
+            state.tree = null;
+            state.nodeMap = null;
+            state.currentPath = '/';
+            state.isSearching = false;
+            state.searchResults = null;
+            localStorage.removeItem('token');
+            loginBtn.textContent = '登录';
+            loginBtn.className = 'primary';
+            userInfo.textContent = '';
+            hideAllUI();
+            clearMsg();
+            footerHash.classList.add('hidden');
+            tokenInput.value = '';
+        }
+
+        function showUI() {
+            searchArea.classList.remove('hidden');
+            breadcrumbArea.classList.remove('hidden');
+            tableWrap.classList.remove('hidden');
+        }
+        function hideAllUI() {
+            searchArea.classList.add('hidden');
+            breadcrumbArea.classList.add('hidden');
+            tableWrap.classList.add('hidden');
+            tableBody.innerHTML = '';
+        }
+
+        // ---------- 渲染 ----------
+        function renderCurrentView() {
+            if (!state.loggedIn) return;
+            if (state.isSearching) {
+                breadcrumbArea.classList.add('hidden');
+            } else {
+                breadcrumbArea.classList.remove('hidden');
+                renderBreadcrumb();
+            }
+            renderTable();
+        }
+
+        function renderBreadcrumb() {
+            const path = state.currentPath;
+            if (path === '/') {
+                crumbPath.innerHTML = '<span class="current">/</span>';
+                const currentEl = crumbPath.querySelector('.current');
+                if (currentEl) {
+                    currentEl.style.cursor = 'default';
+                    currentEl.removeEventListener('click', copyCurrentPath);
+                }
+                return;
+            }
+            const parts = path.split('/').filter(p => p !== '');
+            let html = '';
+            html += '<span class="sep">/</span> ';
+            for (let i = 0; i < parts.length; i++) {
+                const part = parts[i];
+                const isLast = i === parts.length - 1;
+                const accumPath = '/' + parts.slice(0, i + 1).join('/') + '/';
+                if (isLast) {
+                    html += `<span class="current" data-path="${accumPath}">${part}</span> /`;
+                } else {
+                    html += `<span class="dir-link" data-path="${accumPath}">${part}</span> / `;
+                }
+            }
+            crumbPath.innerHTML = html;
+
+            crumbPath.querySelectorAll('.dir-link').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const p = this.dataset.path;
+                    if (p && state.nodeMap && state.nodeMap.has(p)) navigateTo(p);
+                });
+            });
+
+            const currentEl = crumbPath.querySelector('.current');
+            if (currentEl) {
+                currentEl.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const p = this.dataset.path;
+                    if (p) {
+                        copyToClipboard(p, '已复制路径到剪贴板');
+                    }
+                });
+            }
+        }
+
+        function copyCurrentPath(e) {}
+
+        function navigateTo(path) {
+            if (!state.nodeMap || !state.nodeMap.has(path) || state.nodeMap.get(path).type !== 'dir') {
+                console.warn('无效目录:', path);
+                return;
+            }
+            if (state.isSearching) {
+                state.isSearching = false;
+                state.searchResults = null;
+                searchQuery.value = '';
+                clearMsg();
+                if (state.files.length === 0) setMsg('暂无可访问的数据', false);
+            }
+            state.currentPath = path;
+            state.currentPage = 1;
+            renderCurrentView();
+        }
+
+        function renderTable() {
+            const entries = getCurrentEntries();
+            const total = entries.length;
+
+            let effectivePageSize = state.pageSize;
+            let totalPages;
+            if (isFinite(effectivePageSize) && effectivePageSize > 0) {
+                totalPages = Math.max(1, Math.ceil(total / effectivePageSize));
+            } else {
+                totalPages = 1;
+                effectivePageSize = Infinity;
+            }
+            state.totalPages = totalPages;
+
+            if (state.currentPage > totalPages) state.currentPage = totalPages;
+            if (state.currentPage < 1) state.currentPage = 1;
+
+            let start, end;
+            if (isFinite(effectivePageSize) && effectivePageSize > 0) {
+                start = (state.currentPage - 1) * effectivePageSize;
+                end = Math.min(start + effectivePageSize, total);
+            } else {
+                start = 0;
+                end = total;
+            }
+            const pageEntries = entries.slice(start, end);
+
+            pageInput.value = state.currentPage;
+            totalPagesSpan.textContent = totalPages;
+            prevPageBtn.disabled = (state.currentPage <= 1);
+            nextPageBtn.disabled = (state.currentPage >= totalPages);
+
+            if (total === 0) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="empty-state">暂无内容</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            for (const entry of pageEntries) {
+                const isDir = entry.type === 'dir';
+                let name = entry.name;
+                if (isDir && name !== '/') {
+                    name = name + '/';
+                }
+                const fileData = entry.fileData || null;
+                let loc = '', pwd = '', desc = '', author = '';
+                if (fileData) {
+                    loc = fileData.loc || '';
+                    pwd = fileData.pwd || '';
+                    desc = fileData.desc || '';
+                    author = fileData.author || '';
+                }
+                const fullDesc = desc;
+                const lines = (fullDesc == null ? '' : fullDesc).split('\n', 2);
+                const firstLine = lines[0] ? lines[0].trim() : '';
+                const displayDesc = firstLine + (lines.length > 1 ? '…' : '');
+
+                const dataAttrs = isDir ? ` data-type="dir" data-path="${entry.path}"` : '';
+                const filePathAttr = isDir ? '' : ` data-copy-path="${entry.path}"`;
+                const locAttr = loc ? ` data-copy-loc="${escapeHtml(loc)}"` : '';
+
+                html += `<tr${dataAttrs}>
+                    <td class="name-cell ${isDir ? 'dir-name' : 'file-name'}"${filePathAttr}>${escapeHtml(name)}</td>
+                    <td class="loc-cell"${locAttr} title="${escapeHtml(loc)}">${escapeHtml(loc)}</td>
+                    <td>${pwd ? `<span class="pwd-cell" data-pwd="${escapeHtml(pwd)}">${escapeHtml(pwd)}</span>` : ''}</td>
+                    <td>${desc ? `<span class="desc-cell" data-desc="${escapeHtml(fullDesc)}" data-filename="${escapeHtml(name)}">${escapeHtml(displayDesc)}</span>` : ''}</td>
+                    <td class="author-cell" title="${escapeHtml(author)}">${escapeHtml(author)}</td>
+                </tr>`;
+            }
+            tableBody.innerHTML = html;
+
+            document.querySelectorAll('.pwd-cell').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    copyToClipboard(this.dataset.pwd, '已复制密码到剪贴板');
+                });
+            });
+            document.querySelectorAll('.desc-cell').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    const desc = this.dataset.desc || '';
+                    const filename = this.dataset.filename || '';
+                    showModal(filename, desc);
+                });
+            });
+            document.querySelectorAll('.file-name').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const path = this.dataset.copyPath;
+                    if (path) {
+                        copyToClipboard(path, '已复制路径到剪贴板');
+                    }
+                });
+            });
+            document.querySelectorAll('.loc-cell').forEach(el => {
+                el.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const loc = this.dataset.copyLoc;
+                    if (loc) {
+                        copyToClipboard(loc, '已复制位置到剪贴板');
+                    }
+                });
+            });
+        }
+
+        tableBody.addEventListener('click', function(e) {
+            const tr = e.target.closest('tr');
+            if (!tr) return;
+            const type = tr.dataset.type;
+            if (type === 'dir') {
+                const path = tr.dataset.path;
+                if (path) navigateTo(path);
+            }
+        });
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function copyToClipboard(text, successMsg) {
+            if (!text) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast(successMsg || '已复制'))
+                    .catch(() => fallbackCopy(text, successMsg));
+            } else fallbackCopy(text, successMsg);
+        }
+        function fallbackCopy(text, successMsg) {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try { document.execCommand('copy'); showToast(successMsg || '已复制'); } catch (e) { showToast('复制失败，请手动选择复制'); }
+            document.body.removeChild(textarea);
+        }
+
+        function showModal(title, content) {
+            const overlay = document.createElement('div');
+            overlay.className = 'modal-overlay';
+            overlay.innerHTML = `
+                <div class="modal-box">
+                    <div class="modal-title">${escapeHtml(title)}</div>
+                    <div class="modal-body">${escapeHtml(content)}</div>
+                    <button class="modal-close">关闭</button>
+                </div>
+            `;
+            modalContainer.appendChild(overlay);
+            overlay.querySelector('.modal-close').addEventListener('click', () => modalContainer.removeChild(overlay));
+            overlay.addEventListener('click', e => { if (e.target === overlay) modalContainer.removeChild(overlay); });
+        }
+
+        // ---------- 搜索（增加类型过滤） ----------
+        function performSearch() {
+            if (!state.loggedIn || !state.nodeMap) return;
+            const target = searchTarget.value;
+            const scope = searchScope.value;
+            const query = searchQuery.value.trim();
+
+            if (!query) {
+                if (state.isSearching) {
+                    state.isSearching = false;
+                    state.searchResults = null;
+                    searchQuery.value = '';
+                    clearMsg();
+                    if (state.files.length === 0) setMsg('暂无可访问的数据', false);
+                    renderCurrentView();
+                }
+                return;
+            }
+
+            if (target === 'path_exact') {
+                const normQuery = normalizePath(query);
+                if (normQuery === '/') {
+                    const rootResult = [{
+                        type: 'dir',
+                        name: '/',
+                        path: '/',
+                        node: state.nodeMap.get('/')
+                    }];
+                    // 根据类型过滤（仅目录才会保留根目录）
+                    const typeFilter = searchType.value;
+                    let filtered = rootResult;
+                    if (typeFilter === 'files') {
+                        filtered = [];
+                    } else if (typeFilter === 'dirs') {
+                        // 保留目录（根目录）
+                        filtered = rootResult;
+                    }
+                    state.isSearching = true;
+                    state.searchResults = filtered;
+                    state.currentPage = 1;
+                    const count = filtered.length;
+                    setMsg('', false, `搜索结果 (${count} 项)`);
+                    renderCurrentView();
+                    return;
+                }
+            }
+
+            let filesToSearch = [];
+            if (scope === 'global') {
+                filesToSearch = state.files;
+            } else if (scope === 'current') {
+                const entries = getDirEntries(state.currentPath, state.nodeMap);
+                filesToSearch = entries.filter(e => e.type === 'file').map(e => e.fileData);
+            } else if (scope === 'subtree') {
+                filesToSearch = getAllFilesUnder(state.currentPath);
+            }
+
+            let dirsToSearch = [];
+            if (scope === 'global') {
+                dirsToSearch = getAllDirNodes();
+            } else if (scope === 'current') {
+                const entries = getDirEntries(state.currentPath, state.nodeMap);
+                dirsToSearch = entries.filter(e => e.type === 'dir').map(e => ({ type: 'dir', name: e.name, path: e.path, node: e.node }));
+            } else if (scope === 'subtree') {
+                const allDirs = getAllDirNodes();
+                dirsToSearch = allDirs.filter(d => isPathUnder(d.path, state.currentPath));
+            }
+
+            const fileResults = [];
+            const queryLower = query.toLowerCase();
+            if (target === 'path_exact') {
+                const normQuery = normalizePath(query);
+                const normQueryNoSlash = normQuery.endsWith('/') ? normQuery.slice(0, -1) : normQuery;
+                fileResults.push(...filesToSearch.filter(f => {
+                    const p = f.path;
+                    const pNoSlash = p.endsWith('/') ? p.slice(0, -1) : p;
+                    return pNoSlash === normQueryNoSlash;
+                }).map(f => ({ type: 'file', path: f.path, fileData: f })));
+            } else {
+                const searchFields = [];
+                if (target === 'all' || target === 'path') searchFields.push('path');
+                if (target === 'all' || target === 'name') searchFields.push('path');
+                if (target === 'all' || target === 'loc') searchFields.push('loc');
+                if (target === 'all' || target === 'pwd') searchFields.push('pwd');
+                if (target === 'all' || target === 'desc') searchFields.push('desc');
+                if (target === 'all' || target === 'author') searchFields.push('author');
+                if (target !== 'all' && target !== 'path' && target !== 'name') {
+                    searchFields.length = 0;
+                    searchFields.push(target);
+                }
+                if (target === 'name') {
+                    fileResults.push(...filesToSearch.filter(f => {
+                        const base = f.path.split('/').pop();
+                        return base.toLowerCase().includes(queryLower);
+                    }).map(f => ({ type: 'file', path: f.path, fileData: f })));
+                } else {
+                    fileResults.push(...filesToSearch.filter(f => {
+                        for (const field of searchFields) {
+                            let val = f[field] || '';
+                            if (typeof val === 'string' && val.toLowerCase().includes(queryLower)) return true;
+                        }
+                        return false;
+                    }).map(f => ({ type: 'file', path: f.path, fileData: f })));
+                }
+            }
+
+            const dirResults = [];
+            if (target === 'path_exact') {
+                const normQuery = normalizePath(query);
+                const normQueryNoSlash = normQuery.endsWith('/') ? normQuery.slice(0, -1) : normQuery;
+                dirResults.push(...dirsToSearch.filter(d => {
+                    const p = d.path;
+                    const pNoSlash = p.endsWith('/') ? p.slice(0, -1) : p;
+                    return pNoSlash === normQueryNoSlash;
+                }));
+            } else if (target === 'all' || target === 'path' || target === 'name') {
+                dirResults.push(...dirsToSearch.filter(d => {
+                    const name = d.name.toLowerCase();
+                    const pathLower = d.path.toLowerCase();
+                    return name.includes(queryLower) || pathLower.includes(queryLower);
+                }));
+            }
+
+            const combined = [...fileResults, ...dirResults];
+            const seen = new Set();
+            const unique = combined.filter(item => {
+                const key = item.path;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
+
+            // --- 根据 searchType 过滤 ---
+            const typeFilter = searchType.value;
+            let filtered = unique;
+            if (typeFilter === 'files') {
+                filtered = filtered.filter(item => item.type === 'file');
+            } else if (typeFilter === 'dirs') {
+                filtered = filtered.filter(item => item.type === 'dir');
+            }
+            // 'all' 不过滤
+
+            state.isSearching = true;
+            state.searchResults = filtered;
+            state.currentPage = 1;
+
+            const count = filtered.length;
+            setMsg('', false, `搜索结果 (${count} 项)`);
+            renderCurrentView();
+        }
+
+        // ---------- 分页大小变更处理 ----------
+        function updatePageSize() {
+            let val = parseInt(pageSizeInput.value, 10);
+            if (isNaN(val) || val < 0) {
+                pageSizeInput.value = 100;
+                val = 100;
+            }
+            if (val === 0) {
+                state.pageSize = Infinity;
+            } else {
+                state.pageSize = val;
+            }
+            state.currentPage = 1;
+            renderTable();
+        }
+
+        // ---------- 初始化 ----------
+        async function init() {
+            if (typeof MessagePack === 'undefined') {
+                setMsg('依赖加载失败，请刷新页面重试或联系管理员', true);
+                loginBtn.disabled = true;
+                return;
+            }
+            setMsg('正在加载数据文件……');
+            loginBtn.disabled = true;
+            try {
+                const resp = await fetch('data/data', { cache: 'no-store' });
+                if (!resp.ok) throw new Error(`数据文件加载失败 (HTTP ${resp.status})`);
+                const buf = await resp.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                state.dataHash = toUrlSafeBase64(await sha256(bytes));
+                let dataArray;
+                try { dataArray = MessagePack.decode(bytes); } catch (e) { throw new Error('数据文件格式错误'); }
+                if (!Array.isArray(dataArray)) throw new Error('数据文件格式应为数组');
+                state.data = dataArray;
+                clearMsg();
+                loginBtn.disabled = false;
+                const storedToken = localStorage.getItem('token');
+                if (storedToken) {
+                    tokenInput.value = storedToken;
+                    await login(storedToken);
+                } else {
+                    loginBtn.disabled = false;
+                    hideAllUI();
+                }
+            } catch (err) {
+                setMsg(`数据文件加载失败: ${err.message}`, true);
+                loginBtn.disabled = true;
+                hideAllUI();
+            }
+        }
+
+        // ---------- 事件绑定 ----------
+        loginBtn.addEventListener('click', function() {
+            if (state.loggedIn) logout();
+            else {
+                const token = tokenInput.value.trim();
+                if (!token) { setMsg('请输入 Token', true); return; }
+                login(token);
+            }
+        });
+        tokenInput.addEventListener('keydown', e => { if (e.key === 'Enter') loginBtn.click(); });
+
+        searchBtn.addEventListener('click', performSearch);
+        searchQuery.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                performSearch();
+            }
+        });
+
+        searchTarget.addEventListener('change', function() {
+            if (this.value === 'path_exact') {
+                searchScope.value = 'global';
+                searchScope.disabled = true;
+            } else searchScope.disabled = false;
+        });
+        searchTarget.dispatchEvent(new Event('change'));
+
+        upBtn.addEventListener('click', function() {
+            if (state.isSearching) return;
+            if (state.currentPath !== '/') navigateTo(parentPath(state.currentPath));
+        });
+        rootBtn.addEventListener('click', function() {
+            if (state.isSearching) {
+                state.isSearching = false;
+                state.searchResults = null;
+                searchQuery.value = '';
+                clearMsg();
+                if (state.files.length === 0) setMsg('暂无可访问的数据', false);
+            }
+            navigateTo('/');
+        });
+
+        function goToPage(page) {
+            if (!state.loggedIn) return;
+            let p = parseInt(page);
+            if (isNaN(p) || p < 1) p = 1;
+            if (p > state.totalPages) p = state.totalPages;
+            state.currentPage = p;
+            renderTable();
+        }
+        prevPageBtn.addEventListener('click', () => { if (state.currentPage > 1) goToPage(state.currentPage - 1); });
+        nextPageBtn.addEventListener('click', () => { if (state.currentPage < state.totalPages) goToPage(state.currentPage + 1); });
+        gotoBtn.addEventListener('click', () => { const val = pageInput.value.trim(); if (val) goToPage(parseInt(val)); });
+        pageInput.addEventListener('keydown', e => { if (e.key === 'Enter') gotoBtn.click(); });
+
+        // 分页大小：仅按 Enter 生效
+        pageSizeInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                updatePageSize();
+            }
+        });
+
+        init();
+    })();
+</script>
+</body>
+</html>

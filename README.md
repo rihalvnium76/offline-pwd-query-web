@@ -3,7 +3,7 @@
 ## 项目结构
 
 - `web_cli.md` 设计文档
-- `src/`
+- `src/<ai-model-version-options>`
     - `index.html` 离线查询网页
     - `cli.py` 资源文件管理工具
 
