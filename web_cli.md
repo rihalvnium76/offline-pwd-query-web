@@ -196,8 +196,8 @@
         - 点击目录名进入该目录
     - 位置列：文本点击复制（复制成功提示“已复制位置到剪贴板”）
     - 密码列：文本背景色（非整个单元格的背景色）`#EBEEF2`，圆角半径 6px，点击复制（复制成功提示“已复制密码到剪贴板”），支持移动端手动选择复制（适配移动端某些 Clipboard API 失效的场景）
-    - 描述列：描述**手动截断到第一行行尾**，点击弹出模态框，标题为文件名，完整描述可复制
-        - 截断到第一行行尾的代码参考：`const lines = (fullDesc == null ? '' : fullDesc).split('\n', 2); const firstLine = lines[0] ? lines[0].trim() : ''; const displayDesc = firstLine + (lines.length > 1 ? '…' : '')`
+    - 描述列：描述**手动截断到第一行行尾**（尾随换行需正确处理），点击弹出模态框，标题为文件名，完整描述可复制
+        - 应采用的截断到第一行行尾的实现参考：`const lines = (fullDesc == null ? '' : fullDesc).split('\n', 2); const firstLine = lines[0] ? lines[0].trim() : ''; const displayDesc = firstLine + (lines.length > 1 && lines[1].length ? '…' : '')`
     - 目录始终显示在文件前面，然后表格记录以 名称列（名称/路径） 升序排列
     - 表格支持水平滚动，自动最大最适列宽（**保证所有单元格内容刚好完整显示，不被提前截断，尤其注意避免使用自动截断类或限制单元格最大宽度的 CSS 样式**）
     - 表格非搜索状态下仅显示当前目录的文件/目录记录
